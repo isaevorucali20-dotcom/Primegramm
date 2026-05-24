@@ -1,0 +1,6 @@
+{
+  "name": "Primegram",
+  "description": "Primegram client settings and mods dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
