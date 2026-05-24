@@ -149,7 +149,10 @@ class PrimeRepository(private val primeDao: PrimeDao) {
                 ChatUser("1", "Арслан Cherrygram", "@arsLan4k1390", 0xFFEF5350.toInt(), isBot = false, isLocallyCreated = false),
                 ChatUser("2", "Разработчик Primegram", "@primegram_dev", 0xFF26A69A.toInt(), isBot = false, isLocallyCreated = false),
                 ChatUser("3", "Мама", "@mother_love", 0xFFFFCA28.toInt(), isBot = false, isLocallyCreated = false),
-                ChatUser("assistant_bot", "Cherry Stealth Bot", "@cherry_helper_bot", 0xFF9C27B0.toInt(), isBot = true, botToken = "bot2026_stealth", botScript = "hello->Здравствуйте! Я защищенный бот Cherrygram.;ping->Pong!;помощь->Команды: hello, ping, помощь;info->Cherrygram v2.4 (Stealth Edition)", isLocallyCreated = false)
+                ChatUser("alice_private", "Alice Private (Audit)", "@alice_audit", 0xFF00ACC1.toInt(), isBot = false, isLocallyCreated = false),
+                ChatUser("stealth_leaks", "Cherry Leak & Hack Node 📡", "@stealth_leaks", 0xFF43A047.toInt(), isBot = false, isLocallyCreated = false),
+                ChatUser("ton_hackers", "TON Miners & Hackers 💎", "@ton_hack_global", 0xFF1E88E5.toInt(), isBot = false, isLocallyCreated = false),
+                ChatUser("assistant_bot", "Cherry Stealth Bot", "@cherry_helper_bot", 0xFF9C27B0.toInt(), isBot = true, botToken = "bot2026_stealth", botScript = "hello->Здравствуйте! Я защищенный бот Cherrygram.;ping->Pong!;помощь->Команды: hello, ping, помощь, игра, погода;info->Cherrygram v2.4 (Stealth Edition);игра->🎲 Вы бросили кости! Выпало: " + (1..6).random() + " и " + (1..6).random() + "!;погода->⛅ Заокном отличная погода для хакинга: +22°C (Ветер: 3 м/с)", isLocallyCreated = false)
             )
             for (user in defaultUsers) {
                 primeDao.insertChatUser(user)
@@ -167,7 +170,15 @@ class PrimeRepository(private val primeDao: PrimeDao) {
                 LocalMessage(chatUserId = "3", senderName = "Мама", text = "Сынок, ты покушал? ❤️ На даче рассада взошла отлично.", timestamp = System.currentTimeMillis() - 17200000, isMe = false),
                 LocalMessage(chatUserId = "3", senderName = "Me", text = "Выглядит круто. Да, поел!", timestamp = System.currentTimeMillis() - 17100000, isMe = true),
 
-                LocalMessage(chatUserId = "assistant_bot", senderName = "Cherry Stealth Bot", text = "Привет! Я твой локальный оффлайн бот-помощник. Отправь мне 'hello', 'ping', 'помощь' или 'info', и я мгновенно отвечу на Python-подобных скриптовых хуках!", timestamp = System.currentTimeMillis() - 10000, isMe = false)
+                LocalMessage(chatUserId = "alice_private", senderName = "Alice Private (Audit)", text = "Hello! Did we complete the security audit for the new MTProto proxy cluster?", timestamp = System.currentTimeMillis() - 90000, isMe = false),
+                LocalMessage(chatUserId = "alice_private", senderName = "Me", text = "Yes, ping is around 38ms. Ghost routing works seamlessly.", timestamp = System.currentTimeMillis() - 60000, isMe = true),
+
+                LocalMessage(chatUserId = "stealth_leaks", senderName = "Admin_Stealth", text = "⚡ ВНИМАНИЕ: Слиты новые IP-адреса для обхода DPI блокировок. Мгновенно инжектируйте их через Proxy вкладку в Stealth Конфигураторе!", timestamp = System.currentTimeMillis() - 120000, isMe = false),
+
+                LocalMessage(chatUserId = "ton_hackers", senderName = "TON_Miner_99", text = "Парни, TON взлетел выше $8! Кто-то пробовал запустить кошелек через Mini Apps?", timestamp = System.currentTimeMillis() - 200000, isMe = false),
+                LocalMessage(chatUserId = "ton_hackers", senderName = "Durov_Fans", text = "Да, работает огонь, веб-апп вшивается сразу через API.", timestamp = System.currentTimeMillis() - 150000, isMe = false),
+
+                LocalMessage(chatUserId = "assistant_bot", senderName = "Cherry Stealth Bot", text = "Привет! Я твой локальный оффлайн бот-помощник. Отправь мне 'hello', 'ping', 'помощь', 'игра', 'погода' или 'info', и я мгновенно отвечу на Python-подобных скриптовых хуках!", timestamp = System.currentTimeMillis() - 10000, isMe = false)
             )
             for (msg in defaultMessages) {
                 primeDao.insertLocalMessage(msg)
@@ -219,6 +230,10 @@ class PrimeRepository(private val primeDao: PrimeDao) {
 
     suspend fun deleteProxy(id: Int) {
         primeDao.deleteProxyServerById(id)
+    }
+
+    suspend fun insertPlugin(plugin: PluginEntity) {
+        primeDao.insertPlugin(plugin)
     }
 
     suspend fun installPlugin(id: String, install: Boolean) {

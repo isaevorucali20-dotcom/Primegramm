@@ -40,6 +40,9 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
     val miniApps: StateFlow<List<MiniAppEntity>>
 
     // UI Transient States
+    private val _typingState = MutableStateFlow<Map<String, String>>(emptyMap()) // chatId to status description
+    val typingState: StateFlow<Map<String, String>> = _typingState.asStateFlow()
+
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
 
@@ -123,6 +126,31 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         // Seed data on startup
         viewModelScope.launch {
             repository.ensureSeeded()
+
+            // Start proactive background conversation loop for active groups and chats to make them feel 100% alive & realistic
+            launch {
+                delay(8000)
+                while (true) {
+                    val activeId = _activeChatId.value
+                    val rand = (1..100).random()
+                    if (rand < 45) {
+                        // Injected random conversational loop for channels and groups
+                        val targetGroup = listOf("ton_hackers", "stealth_leaks").random()
+                        simulateGroupMessage(targetGroup)
+                    } else if (rand < 55) {
+                        // Random user deletes a message mock-event to trigger "Anti-Recall" banner dynamically in front of user
+                        if (activeId == "1" || activeId == "2" || activeId == "alice_private") {
+                            simulateDeletedMessageTrigger()
+                        }
+                    } else if (rand < 65) {
+                        // Send one-time self destruct media saved log
+                        if (activeId == "alice_private" || activeId == "1") {
+                            simulateOneTimeMediaTrigger()
+                        }
+                    }
+                    delay(20000) // cycle every 20 seconds
+                }
+            }
         }
     }
 
@@ -168,17 +196,80 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
 
             repository.addAnalyticsLog("app_usage", "Отправлено сообщ.", 1.0f)
             
-            // Check if selected contact is local BOT, or simulation
+            // Context simulation response depending on the chat partner
             val currentUsers = chatUsers.value
             val targetUser = currentUsers.find { it.id == currentChatId }
 
             if (targetUser != null && targetUser.isBot) {
+                setTypingState(currentChatId, "${targetUser.displayName} отвечает...")
+                delay(1000)
+                clearTypingState(currentChatId)
                 runLocalBotScript(targetUser, draft)
+            } else if (currentChatId == "ton_hackers") {
+                // Interactive Supergroup Simulation
+                val responders = listOf("TON_Miner_99", "Durov_Fans", "Hacker_TON")
+                val responder = responders.random()
+                
+                setTypingState(currentChatId, "$responder печатает...")
+                delay(1200)
+                clearTypingState(currentChatId)
+
+                val replyText = when {
+                    draft.contains("TON", ignoreCase = true) || draft.contains("тон", ignoreCase = true) -> 
+                        "Да, $responder согласен! TON Space решает все вопросы напрямую в приложении без костылей."
+                    draft.contains("прокси", ignoreCase = true) || draft.contains("proxy", ignoreCase = true) ->
+                        "С прокси пинг вообще отличный, соединение шифрованное."
+                    else -> 
+                        "Отличный фидбек! А кто тестил новый плагин Premium Star Decorator, статус сразу горит?"
+                }
+                
+                repository.insertLocalMessage(
+                    LocalMessage(
+                        chatUserId = currentChatId,
+                        senderName = responder,
+                        text = replyText,
+                        isMe = false
+                    )
+                )
+            } else if (currentChatId == "stealth_leaks") {
+                // Interactive Channel Feed Comment Simulation
+                setTypingState(currentChatId, "Admin_Stealth печатает...")
+                delay(1500)
+                clearTypingState(currentChatId)
+
+                repository.insertLocalMessage(
+                    LocalMessage(
+                        chatUserId = currentChatId,
+                        senderName = "Admin_Stealth",
+                        text = "Записано. Мы уже пересобираем APK-заплатку с добавлением API фич для мини-аппов.",
+                        isMe = false
+                    )
+                )
             } else {
+                // Normal user chat / translation check
+                val partner = getChatPartnerName(currentChatId)
+                setTypingState(currentChatId, "$partner печатает...")
+                delay(1400)
+                clearTypingState(currentChatId)
+
                 val currentSettings = settings.value ?: return@launch
                 if (currentSettings.translatorEnabled) {
-                    delay(1200)
                     simulateLocalTranslatedResponse(currentChatId, draft)
+                } else {
+                    // Simple basic smart response in Russian
+                    val reply = when {
+                        draft.contains("привет", ignoreCase = true) || draft.contains("ку", ignoreCase = true) -> "Привет! Как дела?"
+                        draft.contains("дела", ignoreCase = true) -> "Все отлично, тестирую новые stealth плагины Cherrygram."
+                        else -> "Согласен, этот билд работает очень шустро!"
+                    }
+                    repository.insertLocalMessage(
+                        LocalMessage(
+                            chatUserId = currentChatId,
+                            senderName = partner,
+                            text = reply,
+                            isMe = false
+                        )
+                    )
                 }
             }
         }
@@ -300,91 +391,87 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // SIMULATED MOD FEATURES INTERCEPTIONS
-    fun simulateDeletedMessageTrigger() {
-        viewModelScope.launch {
-            val currentChatId = _activeChatId.value
-            val partner = getChatPartnerName(currentChatId)
-            val indexColor = getChatPartnerColor(currentChatId)
+    suspend fun simulateDeletedMessageTrigger() {
+        val currentChatId = _activeChatId.value
+        val partner = getChatPartnerName(currentChatId)
+        val indexColor = getChatPartnerColor(currentChatId)
 
-            val phrase = listOf(
-                "Слушай, а где исходники Черриграма лежали?",
-                "Алекс, удали мою фотку с сервера плиз!",
-                "Ой, случайно отправил тебе пароль от кошелька: secret_seed_phrase_2026",
-                "Завтра в 14:00 встреча. Не говори никому, стираю сообщение."
-            ).random()
+        val phrase = listOf(
+            "Слушай, а где исходники Черриграма лежали?",
+            "Алекс, удали мою фотку с сервера плиз!",
+            "Ой, случайно отправил тебе пароль от кошелька: secret_seed_phrase_2026",
+            "Завтра в 14:00 встреча. Не говори никому, стираю сообщение."
+        ).random()
 
-            // Step 1: Insert normal message
-            val msgId = (10000..99999).random()
-            val incomingMsg = LocalMessage(
-                id = msgId,
-                chatUserId = currentChatId,
-                senderName = partner,
-                text = phrase,
-                isMe = false
-            )
-            repository.insertLocalMessage(incomingMsg)
+        // Step 1: Insert normal message
+        val msgId = (10000..99999).random()
+        val incomingMsg = LocalMessage(
+            id = msgId,
+            chatUserId = currentChatId,
+            senderName = partner,
+            text = phrase,
+            isMe = false
+        )
+        repository.insertLocalMessage(incomingMsg)
 
-            showToast("$partner печатает...")
-            delay(3500)
+        showToast("$partner печатает...")
+        delay(3500)
 
-            // Step 2: Intercept deleted message in Room DB
-            val deletedModel = incomingMsg.copy(isDeleted = true)
-            repository.insertLocalMessage(deletedModel)
+        // Step 2: Intercept deleted message in Room DB
+        val deletedModel = incomingMsg.copy(isDeleted = true)
+        repository.insertLocalMessage(deletedModel)
 
-            // Save to actual deleted logs
-            val dbMsg = DeletedMessage(
-                senderName = partner,
-                senderAvatarColor = indexColor,
-                messageText = phrase,
-                timestamp = System.currentTimeMillis() - 3500,
-                deletedTimestamp = System.currentTimeMillis(),
-                originalChatId = if (currentChatId.all { it.isDigit() }) currentChatId.toIntOrNull() ?: 1 else 1
-            )
-            repository.insertDeletedMessage(dbMsg)
-            repository.addAnalyticsLog("security", "Логи удел. сообщений", 1.0f)
-            
-            showToast("⚠️ Anti-Recall: $partner удалил сообщение! Перехвачено и сохранено.")
-        }
+        // Save to actual deleted logs
+        val dbMsg = DeletedMessage(
+            senderName = partner,
+            senderAvatarColor = indexColor,
+            messageText = phrase,
+            timestamp = System.currentTimeMillis() - 3500,
+            deletedTimestamp = System.currentTimeMillis(),
+            originalChatId = if (currentChatId.all { it.isDigit() }) currentChatId.toIntOrNull() ?: 1 else 1
+        )
+        repository.insertDeletedMessage(dbMsg)
+        repository.addAnalyticsLog("security", "Логи удел. сообщений", 1.0f)
+        
+        showToast("⚠️ Anti-Recall: $partner удалил сообщение! Перехвачено и сохранено.")
     }
 
-    fun simulateOneTimeMediaTrigger() {
-        viewModelScope.launch {
-            val currentChatId = _activeChatId.value
-            val partner = getChatPartnerName(currentChatId)
-            
-            val isVideo = listOf(true, false).random()
-            val fileTypeName = if (isVideo) "одноразовое видео" else "одноразовое фото"
-            val fileExtension = if (isVideo) "mp4" else "jpg"
-            val mockTitle = if (isVideo) "Секретное видео_${System.currentTimeMillis() % 1000}.$fileExtension" else "Фото-призрак_${System.currentTimeMillis() % 1000}.$fileExtension"
-            
-            val mediaMsg = LocalMessage(
-                chatUserId = currentChatId,
-                senderName = partner,
-                text = "🖼 [$fileTypeName, нажмите для просмотра]",
-                isMe = false,
-                isOneTimeMedia = true,
-                mediaPlaceholder = mockTitle,
-                isVideoType = isVideo
-            )
-            repository.insertLocalMessage(mediaMsg)
+    suspend fun simulateOneTimeMediaTrigger() {
+        val currentChatId = _activeChatId.value
+        val partner = getChatPartnerName(currentChatId)
+        
+        val isVideo = listOf(true, false).random()
+        val fileTypeName = if (isVideo) "одноразовое видео" else "одноразовое фото"
+        val fileExtension = if (isVideo) "mp4" else "jpg"
+        val mockTitle = if (isVideo) "Секретное видео_${System.currentTimeMillis() % 1000}.$fileExtension" else "Фото-призрак_${System.currentTimeMillis() % 1000}.$fileExtension"
+        
+        val mediaMsg = LocalMessage(
+            chatUserId = currentChatId,
+            senderName = partner,
+            text = "🖼 [$fileTypeName, нажмите для просмотра]",
+            isMe = false,
+            isOneTimeMedia = true,
+            mediaPlaceholder = mockTitle,
+            isVideoType = isVideo
+        )
+        repository.insertLocalMessage(mediaMsg)
 
-            delay(2000)
+        delay(2000)
 
-            // Primegram intercepts and downloads it to DB!
-            val mediaObj = SelfDestructMedia(
-                senderName = partner,
-                fileType = if (isVideo) "video" else "image",
-                durationSeconds = if (isVideo) (5..20).random() else 0,
-                fileSizeKb = (300..5000).random(),
-                timestamp = System.currentTimeMillis(),
-                visualPlaceholderRes = if (isVideo) "video_preview" else "photo_preview",
-                title = mockTitle
-            )
-            repository.insertSelfDestructMedia(mediaObj)
-            repository.addAnalyticsLog("security", "Сохранено 1-time файлов", 1.0f)
+        // Primegram intercepts and downloads it to DB!
+        val mediaObj = SelfDestructMedia(
+            senderName = partner,
+            fileType = if (isVideo) "video" else "image",
+            durationSeconds = if (isVideo) (5..20).random() else 0,
+            fileSizeKb = (300..5000).random(),
+            timestamp = System.currentTimeMillis(),
+            visualPlaceholderRes = if (isVideo) "video_preview" else "photo_preview",
+            title = mockTitle
+        )
+        repository.insertSelfDestructMedia(mediaObj)
+        repository.addAnalyticsLog("security", "Сохранено 1-time файлов", 1.0f)
 
-            showToast("📥 MediaSaver: $partner прислал одноразовое медиа. Копия сохранена в Секретный Сейф!")
-        }
+        showToast("📥 MediaSaver: $partner прислал одноразовое медиа. Копия сохранена в Секретный Сейф!")
     }
 
     // UPDATE AND CONTROL ACTIONS
@@ -550,6 +637,79 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun getSettingsDirect(): PrimeSettings {
         return repository.getSettings()
+    }
+
+    private suspend fun simulateGroupMessage(groupId: String) {
+        val randMemberAndPhrase = when (groupId) {
+            "ton_hackers" -> {
+                val member = listOf("TON_Miner_99", "Durov_Fans", "Hacker_TON").random()
+                val phrase = listOf(
+                    "Кто пробовал выкачать TON SDK во встроенный мини-апп? Ссылки работают?",
+                    "Демка игры Gamee в Mini App просто пушка, без лагов и без костылей.",
+                    "В новом билде Cherrygram плагин Premium Star Decorator работает отлично!",
+                    "Разрабы Черриграма перевели сетевой сокет на рутины, пинг теперь 35мс.",
+                    "Сейф перехвата Anti-Recall вчера спас удаленный пост админа, лол!"
+                ).random()
+                Pair(member, phrase)
+            }
+            "stealth_leaks" -> {
+                val member = listOf("Admin_Stealth", "LeakBot", "BypassGroup").random()
+                val phrase = listOf(
+                    "📡 СКАНИРОВАНИЕ... Системы обхода ТСПУ зафиксировали ротацию портов. Подключаем резервы.",
+                    "Внимание: плагин 'Anti-Recall Pro' перехватывает медиафайлы даже после клика.",
+                    "Встроенный 'Silent Typing Injector' теперь маскирует статус набора текста под запись аудио.",
+                    "Все настройки и бэкапы зашифрованы локально по стандарту AES-256."
+                ).random()
+                Pair(member, phrase)
+            }
+            else -> null
+        }
+
+        if (randMemberAndPhrase != null) {
+            setTypingState(groupId, "${randMemberAndPhrase.first} печатает...")
+            delay(2000)
+            clearTypingState(groupId)
+
+            val msg = LocalMessage(
+                chatUserId = groupId,
+                senderName = randMemberAndPhrase.first,
+                text = randMemberAndPhrase.second,
+                isMe = false
+            )
+            repository.insertLocalMessage(msg)
+            repository.addAnalyticsLog("network", "Групповой месседж от ${randMemberAndPhrase.first}", 1.0f)
+        }
+    }
+
+    fun addCustomPlugin(id: String, name: String, description: String, author: String, version: String, sizeMb: Double, scriptLang: String = "javascript", scriptCode: String = "") {
+        viewModelScope.launch {
+            val updatedPlugin = com.example.data.PluginEntity(
+                id = id,
+                name = name,
+                description = description,
+                author = author,
+                version = version,
+                isInstalled = true,
+                sizeMb = sizeMb,
+                scriptLanguage = scriptLang,
+                scriptCode = scriptCode
+            )
+            repository.insertPlugin(updatedPlugin)
+            repository.addAnalyticsLog("app_usage", "Добавлен плагин: $name", sizeMb.toFloat())
+            showToast("🔌 Плагин '$name' успешно внедрен в ядро!")
+        }
+    }
+
+    fun setTypingState(chatId: String, text: String) {
+        _typingState.value = _typingState.value.toMutableMap().apply {
+            put(chatId, text)
+        }
+    }
+
+    fun clearTypingState(chatId: String) {
+        _typingState.value = _typingState.value.toMutableMap().apply {
+            remove(chatId)
+        }
     }
 
     fun getChatPartnerName(chatId: String): String {

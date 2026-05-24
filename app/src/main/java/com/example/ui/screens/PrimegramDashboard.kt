@@ -100,6 +100,7 @@ fun ChatsScreen(
     val chatUsers by viewModel.chatUsers.collectAsState()
     val currentMessages by viewModel.activeChatMessages.collectAsState()
     val draft by viewModel.chatDraft.collectAsState()
+    val typingState by viewModel.typingState.collectAsState()
     
     // Dialog overlays
     var showAddUserDialog by remember { mutableStateOf(false) }
@@ -178,19 +179,23 @@ fun ChatsScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                val activeTyping = typingState[activeChatId]
                                 Box(
                                     modifier = Modifier
                                         .size(8.dp)
                                         .clip(CircleShape)
                                         .background(
-                                            if (activeSettings.ghostModeEnabled) Color(0xFF78909C) else Color(0xFF4CAF50)
+                                            if (activeTyping != null) MaterialTheme.colorScheme.primary 
+                                            else if (activeSettings.ghostModeEnabled) Color(0xFF78909C) 
+                                            else Color(0xFF4CAF50)
                                         )
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = onlineLabel,
+                                    text = activeTyping ?: onlineLabel,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                                    color = if (activeTyping != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                                    fontWeight = if (activeTyping != null) FontWeight.SemiBold else FontWeight.Normal
                                 )
                             }
                         }
@@ -207,7 +212,7 @@ fun ChatsScreen(
                             )
                         }
                         IconButton(
-                            onClick = { viewModel.simulateDeletedMessageTrigger() },
+                            onClick = { scope.launch { viewModel.simulateDeletedMessageTrigger() } },
                             modifier = Modifier.testTag("sim_delete_button")
                         ) {
                             Icon(
@@ -217,7 +222,7 @@ fun ChatsScreen(
                             )
                         }
                         IconButton(
-                            onClick = { viewModel.simulateOneTimeMediaTrigger() },
+                            onClick = { scope.launch { viewModel.simulateOneTimeMediaTrigger() } },
                             modifier = Modifier.testTag("sim_media_button")
                         ) {
                             Icon(
@@ -302,7 +307,7 @@ fun ChatsScreen(
                         }
                     } else {
                         items(currentMessages, key = { it.id }) { message ->
-                            ChatMessageItem(message = message, activeSettings = activeSettings)
+                            ChatMessageItem(message = message, activeSettings = activeSettings, viewModel = viewModel)
                             Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
@@ -620,7 +625,8 @@ fun DrawerMenuContent(
 @Composable
 fun ChatMessageItem(
     message: LocalMessage,
-    activeSettings: PrimeSettings
+    activeSettings: PrimeSettings,
+    viewModel: PrimeViewModel
 ) {
     val alignment = if (message.isMe) Alignment.End else Alignment.Start
     val containerBg = if (message.isMe) {
@@ -758,6 +764,36 @@ fun ChatMessageItem(
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(10.dp)
                     )
+                }
+            }
+        }
+
+        if (!message.isMe && message.chatUserId == "assistant_bot") {
+            Spacer(modifier = Modifier.height(5.dp))
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val botCommands = listOf("hello", "ping", "игра", "погода", "info")
+                botCommands.forEach { cmd ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                            .clickable {
+                                viewModel.updateDraft(cmd)
+                                viewModel.sendDraftMessage()
+                            }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = cmd,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }
@@ -1309,6 +1345,8 @@ fun PrimegramSettingsScreen(
     val plugins by viewModel.plugins.collectAsState()
     val downloadStatus by viewModel.pluginDownloadStatus.collectAsState()
     
+    var showAddPluginDialog by remember { mutableStateOf(false) }
+    var showPluginGuide by remember { mutableStateOf(false) }
     var setApiInput by remember(activeSettings.setApiJson) { mutableStateOf(activeSettings.setApiJson) }
 
     Scaffold(
@@ -1488,11 +1526,79 @@ fun PrimegramSettingsScreen(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(Icons.Default.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Фреймворк Плагинов", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Фреймворк Плагинов", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                            
+                            IconButton(onClick = { showPluginGuide = !showPluginGuide }) {
+                                Icon(
+                                    imageVector = if (showPluginGuide) Icons.Default.Info else Icons.Default.Help,
+                                    contentDescription = "Инструкция по плагинам",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        if (showPluginGuide) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "💡 Руководство разработчика плагинов",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "Cherrygram Scripting Engine поддерживает локальную инжекцию легких плагинов, написанных на JavaScript (ES6+) или Python.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Доступные хуки и сигнатуры запуска:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        Text("• on_message_receive(msg): Срабатывает при приеме. Возвращает объект сообщения.", fontSize = 9.sp)
+                                        Text("• on_message_send(msg): Изменяет исходящий текст перед шифрованием.", fontSize = 9.sp)
+                                        Text("• bypass_dpi_routing(packet): Сниффинг и обход пакетов TCP/DPI.", fontSize = 9.sp)
+                                    }
+                                }
+                                Text(
+                                    text = "Шаблон кода плагина:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp))
+                                        .padding(8.dp)
+                                ) {
+                                    Text(
+                                        text = "// JS: Перехватчик ключевых слов\nfunction on_message_receive(msg) {\n  if (msg.text.includes('пароль')) {\n    msg.text = '[ЗАШИФРОВАНО 🔒]';\n  }\n  return msg;\n}",
+                                        fontSize = 9.sp,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        color = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            }
                         }
 
                         Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
@@ -1515,6 +1621,20 @@ fun PrimegramSettingsScreen(
                                         }
                                         Text(plugin.description, style = MaterialTheme.typography.bodySmall, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         Text("Автор: ${plugin.author} | Вес: ${plugin.sizeMb} MB", style = MaterialTheme.typography.bodySmall, fontSize = 8.sp, color = Color.Gray)
+                                        if (plugin.scriptCode.isNotBlank()) {
+                                            val langIcon = if (plugin.scriptLanguage == "python") "🐍 Python" else "📜 JavaScript"
+                                            Text(
+                                                text = "Кастомный скрипт ($langIcon):\n${plugin.scriptCode}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontSize = 9.sp,
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                                                    .padding(6.dp)
+                                            )
+                                        }
                                     }
 
                                     Spacer(modifier = Modifier.width(12.dp))
@@ -1544,6 +1664,20 @@ fun PrimegramSettingsScreen(
                                     )
                                 }
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { showAddPluginDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Инсталлировать сторонний плагин", fontSize = 12.sp)
                         }
                     }
                 }
@@ -1691,6 +1825,16 @@ fun PrimegramSettingsScreen(
             }
         }
     }
+
+    if (showAddPluginDialog) {
+        AddPluginDialog(
+            onDismiss = { showAddPluginDialog = false },
+            onConfirm = { id, name, desc, author, ver, size, scriptLang, scriptCode ->
+                viewModel.addCustomPlugin(id, name, desc, author, ver, size, scriptLang, scriptCode)
+                showAddPluginDialog = false
+            }
+        )
+    }
 }
 
 @Composable
@@ -1717,4 +1861,132 @@ fun SettingToggleRow(
             onCheckedChange = onCheckedChange
         )
     }
+}
+
+@Composable
+fun AddPluginDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, String, String, String, Double, String, String) -> Unit
+) {
+    var pId by remember { mutableStateOf("custom_crypto_filter") }
+    var pName by remember { mutableStateOf("Шифратор Текста PRO") }
+    var pDesc by remember { mutableStateOf("Перехватывает сообщения и на лету шифрует конфиденциальные данные.") }
+    var pAuthor by remember { mutableStateOf("PrimeAnon") }
+    var pVer by remember { mutableStateOf("1.0.0") }
+    var pSize by remember { mutableStateOf("0.8") }
+    var pScriptLanguage by remember { mutableStateOf("javascript") }
+    var pScriptCode by remember { 
+        mutableStateOf("// JS: Обработчик события\nfunction on_message_receive(msg) {\n  if (msg.text.includes('секрет')) {\n    msg.text = '⚠️ [ДАННЫЕ ЗАШИФРОВАНЫ КЛИЕНТОМ]';\n  }\n  return msg;\n}") 
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("🔌 Установка кастомного плагина") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                OutlinedTextField(
+                    value = pId,
+                    onValueChange = { pId = it },
+                    label = { Text("Идентификатор плагина (ID)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = pName,
+                    onValueChange = { pName = it },
+                    label = { Text("Название плагина") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = pDesc,
+                    onValueChange = { pDesc = it },
+                    label = { Text("Описание функционала") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = pAuthor,
+                        onValueChange = { pAuthor = it },
+                        label = { Text("Автор") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = pVer,
+                        onValueChange = { pVer = it },
+                        label = { Text("Версия") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                OutlinedTextField(
+                    value = pSize,
+                    onValueChange = { pSize = it },
+                    label = { Text("Размер (MB)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Выбор языка скрипта:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("javascript", "python").forEach { lang ->
+                        val isSelected = pScriptLanguage == lang
+                        Button(
+                            onClick = { 
+                                pScriptLanguage = lang
+                                if (pScriptCode.isBlank() || pScriptCode.startsWith("//") || pScriptCode.startsWith("#")) {
+                                    pScriptCode = if (lang == "javascript") {
+                                        "// JS: Обработчик события\nfunction on_message_receive(msg) {\n  return msg;\n}"
+                                    } else {
+                                        "# Python: Обработчик события\ndef on_message_receive(msg):\n    return msg"
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (lang == "javascript") "📜 JavaScript" else "🐍 Python")
+                        }
+                    }
+                }
+                
+                OutlinedTextField(
+                    value = pScriptCode,
+                    onValueChange = { pScriptCode = it },
+                    label = { Text("Исходный код плагина") },
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        fontSize = 11.sp
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp),
+                    placeholder = { Text("Напишите листинг кода...") }
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (pId.isNotBlank() && pName.isNotBlank()) {
+                        val sizeVal = pSize.toDoubleOrNull() ?: 1.0
+                        onConfirm(pId, pName, pDesc, pAuthor, pVer, sizeVal, pScriptLanguage, pScriptCode)
+                    }
+                }
+            ) {
+                Text("Установить")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Отмена")
+            }
+        }
+    )
 }

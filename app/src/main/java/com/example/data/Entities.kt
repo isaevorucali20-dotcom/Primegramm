@@ -80,7 +80,9 @@ data class PluginEntity(
     val author: String,
     val version: String,
     val isInstalled: Boolean = false,
-    val sizeMb: Double = 1.2
+    val sizeMb: Double = 1.2,
+    val scriptLanguage: String = "javascript", // "python" or "javascript"
+    val scriptCode: String = ""
 )
 
 @Entity(tableName = "analytics_log")

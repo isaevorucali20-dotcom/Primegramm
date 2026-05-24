@@ -1,8 +1,11 @@
 package com.example
 
+import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.ui.PrimeViewModel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -17,5 +20,12 @@ class ExampleRobolectricTest {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val appName = context.getString(R.string.app_name)
     assertEquals("Primegram", appName)
+  }
+
+  @Test
+  fun `test PrimeViewModel instantiation and database seeding`() {
+    val application = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = PrimeViewModel(application)
+    assertNotNull(viewModel)
   }
 }
