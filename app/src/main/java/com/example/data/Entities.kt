@@ -31,7 +31,10 @@ data class PrimeSettings(
     val proxyEnabled: Boolean = false,
     val currentProxyId: Int = 1,
     val spoofedIpLocation: String = "Zurich, Switzerland", // Zurich, Tokyo, New York, Moscow, London, Off
-    val spoofedIpAddress: String = "194.209.14.88"
+    val spoofedIpAddress: String = "194.209.14.88",
+    
+    // Set API configuration
+    val setApiJson: String = "{}"
 )
 
 @Entity(tableName = "deleted_messages")
@@ -88,3 +91,41 @@ data class AnalyticsLog(
     val label: String,
     val value: Float
 )
+
+@Entity(tableName = "chat_users")
+data class ChatUser(
+    @PrimaryKey val id: String, // User numeric ID or username
+    val displayName: String,
+    val username: String, // e.g. "@username"
+    val avatarColor: Int = 0xFF42A5F5.toInt(),
+    val isBot: Boolean = false,
+    val botToken: String? = null,
+    val botScript: String? = null, // Rules like "hello->Hi there!;ping->pong"
+    val isLocallyCreated: Boolean = true
+)
+
+@Entity(tableName = "local_messages")
+data class LocalMessage(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val chatUserId: String,
+    val senderName: String,
+    val text: String,
+    val timestamp: Long = System.currentTimeMillis(),
+    val isMe: Boolean,
+    val isDeleted: Boolean = false,
+    val isOneTimeMedia: Boolean = false,
+    val mediaPlaceholder: String = "",
+    val isVideoType: Boolean = false,
+    val isTranslated: Boolean = false
+)
+
+@Entity(tableName = "mini_apps")
+data class MiniAppEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val description: String,
+    val url: String,
+    val iconName: String = "web",
+    val addedByUser: Boolean = false
+)
+

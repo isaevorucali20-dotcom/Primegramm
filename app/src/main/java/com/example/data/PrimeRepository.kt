@@ -12,6 +12,12 @@ class PrimeRepository(private val primeDao: PrimeDao) {
     val proxyServers: Flow<List<ProxyServer>> = primeDao.getProxyServersFlow()
     val plugins: Flow<List<PluginEntity>> = primeDao.getPluginsFlow()
     val analyticsLogs: Flow<List<AnalyticsLog>> = primeDao.getAnalyticsLogsFlow()
+    val chatUsers: Flow<List<ChatUser>> = primeDao.getChatUsersFlow()
+    val miniApps: Flow<List<MiniAppEntity>> = primeDao.getMiniAppsFlow()
+
+    fun getLocalMessagesForChat(chatUserId: String): Flow<List<LocalMessage>> {
+        return primeDao.getLocalMessagesForChatFlow(chatUserId)
+    }
 
     suspend fun getSettings(): PrimeSettings {
         return primeDao.getSettingsDirect() ?: createDefaultSettings()
@@ -137,6 +143,46 @@ class PrimeRepository(private val primeDao: PrimeDao) {
             for (log in initialLogs) {
                 primeDao.insertAnalyticsLog(log)
             }
+
+            // Seed Chat Users
+            val defaultUsers = listOf(
+                ChatUser("1", "Арслан Cherrygram", "@arsLan4k1390", 0xFFEF5350.toInt(), isBot = false, isLocallyCreated = false),
+                ChatUser("2", "Разработчик Primegram", "@primegram_dev", 0xFF26A69A.toInt(), isBot = false, isLocallyCreated = false),
+                ChatUser("3", "Мама", "@mother_love", 0xFFFFCA28.toInt(), isBot = false, isLocallyCreated = false),
+                ChatUser("assistant_bot", "Cherry Stealth Bot", "@cherry_helper_bot", 0xFF9C27B0.toInt(), isBot = true, botToken = "bot2026_stealth", botScript = "hello->Здравствуйте! Я защищенный бот Cherrygram.;ping->Pong!;помощь->Команды: hello, ping, помощь;info->Cherrygram v2.4 (Stealth Edition)", isLocallyCreated = false)
+            )
+            for (user in defaultUsers) {
+                primeDao.insertChatUser(user)
+            }
+
+            // Seed Local Messages
+            val defaultMessages = listOf(
+                LocalMessage(chatUserId = "1", senderName = "Арслан Cherrygram", text = "Привет, зацени супер-фичи Cherrygram! 🚀", timestamp = System.currentTimeMillis() - 600000, isMe = false),
+                LocalMessage(chatUserId = "1", senderName = "Me", text = "Ого, привет! А режим невидимки (призрака) работает?", timestamp = System.currentTimeMillis() - 480000, isMe = true),
+                LocalMessage(chatUserId = "1", senderName = "Арслан Cherrygram", text = "Да, в призраке сообщения читаются полностью незаметно, а онлайн скрыт совсем.", timestamp = System.currentTimeMillis() - 400000, isMe = false),
+                
+                LocalMessage(chatUserId = "2", senderName = "Разработчик Primegram", text = "Привет! Тестируем повышенную безопасность и IP обфускацию.", timestamp = System.currentTimeMillis() - 3600000, isMe = false),
+                LocalMessage(chatUserId = "2", senderName = "Me", text = "Отлично, у меня пинг прокси 38мс!", timestamp = System.currentTimeMillis() - 3400000, isMe = true),
+                
+                LocalMessage(chatUserId = "3", senderName = "Мама", text = "Сынок, ты покушал? ❤️ На даче рассада взошла отлично.", timestamp = System.currentTimeMillis() - 17200000, isMe = false),
+                LocalMessage(chatUserId = "3", senderName = "Me", text = "Выглядит круто. Да, поел!", timestamp = System.currentTimeMillis() - 17100000, isMe = true),
+
+                LocalMessage(chatUserId = "assistant_bot", senderName = "Cherry Stealth Bot", text = "Привет! Я твой локальный оффлайн бот-помощник. Отправь мне 'hello', 'ping', 'помощь' или 'info', и я мгновенно отвечу на Python-подобных скриптовых хуках!", timestamp = System.currentTimeMillis() - 10000, isMe = false)
+            )
+            for (msg in defaultMessages) {
+                primeDao.insertLocalMessage(msg)
+            }
+
+            // Seed Mini Apps
+            val defaultMiniApps = listOf(
+                MiniAppEntity("bot_picker", "BotFather Manager", "Кастомный менеджер ботов и токенов Cherrygram", "https://telegram.org/js/telegram-web-app.js", "smart_toy", false),
+                MiniAppEntity("tg_games", "Retro Space Game", "Полноценная HTML5 игра Gamee для тренировки реакции", "https://tgbots.io/html5-game-demo", "sports_esports", false),
+                MiniAppEntity("cherry_docs", "Cherrygram Guide", "Официальная вики-документация по сборке клиента и плагинов", "https://github.com/arsLan4k1390/Cherrygram/blob/master/README.md", "menu_book", false),
+                MiniAppEntity("ton_viewer", "TON Space explorer", "Интегрированный HTML-кошелек и обозреватель адресов блокчейна", "https://tonscan.org/", "account_balance_wallet", false)
+            )
+            for (app in defaultMiniApps) {
+                primeDao.insertMiniApp(app)
+            }
         }
     }
 
@@ -187,5 +233,33 @@ class PrimeRepository(private val primeDao: PrimeDao) {
 
     suspend fun clearCache() {
         addAnalyticsLog("network", "Очистка кэша (MB)", 345.5f)
+    }
+
+    suspend fun insertChatUser(user: ChatUser) {
+        primeDao.insertChatUser(user)
+    }
+
+    suspend fun deleteChatUser(id: String) {
+        primeDao.deleteChatUserById(id)
+    }
+
+    suspend fun insertLocalMessage(msg: LocalMessage) {
+        primeDao.insertLocalMessage(msg)
+    }
+
+    suspend fun markLocalMessageDeleted(id: Int) {
+        primeDao.markLocalMessageDeleted(id)
+    }
+
+    suspend fun clearChatHistory(chatUserId: String) {
+        primeDao.clearChatHistory(chatUserId)
+    }
+
+    suspend fun insertMiniApp(app: MiniAppEntity) {
+        primeDao.insertMiniApp(app)
+    }
+
+    suspend fun deleteMiniApp(id: String) {
+        primeDao.deleteMiniAppById(id)
     }
 }

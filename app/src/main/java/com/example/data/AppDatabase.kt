@@ -12,9 +12,12 @@ import androidx.room.RoomDatabase
         SelfDestructMedia::class,
         ProxyServer::class,
         PluginEntity::class,
-        AnalyticsLog::class
+        AnalyticsLog::class,
+        ChatUser::class,
+        LocalMessage::class,
+        MiniAppEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

@@ -78,4 +78,40 @@ interface PrimeDao {
     
     @Query("DELETE FROM analytics_log")
     suspend fun clearAnalyticsLogs()
+
+    // Chat Users
+    @Query("SELECT * FROM chat_users ORDER BY displayName ASC")
+    fun getChatUsersFlow(): Flow<List<ChatUser>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChatUser(user: ChatUser)
+
+    @Query("DELETE FROM chat_users WHERE id = :id")
+    suspend fun deleteChatUserById(id: String)
+
+    // Local Messages
+    @Query("SELECT * FROM local_messages WHERE chatUserId = :chatUserId ORDER BY timestamp ASC")
+    fun getLocalMessagesForChatFlow(chatUserId: String): Flow<List<LocalMessage>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLocalMessage(msg: LocalMessage)
+
+    @Update
+    suspend fun updateLocalMessage(msg: LocalMessage)
+
+    @Query("UPDATE local_messages SET isDeleted = 1 WHERE id = :id")
+    suspend fun markLocalMessageDeleted(id: Int)
+
+    @Query("DELETE FROM local_messages WHERE chatUserId = :chatUserId")
+    suspend fun clearChatHistory(chatUserId: String)
+
+    // Mini Apps
+    @Query("SELECT * FROM mini_apps ORDER BY name ASC")
+    fun getMiniAppsFlow(): Flow<List<MiniAppEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMiniApp(app: MiniAppEntity)
+
+    @Query("DELETE FROM mini_apps WHERE id = :id")
+    suspend fun deleteMiniAppById(id: String)
 }
