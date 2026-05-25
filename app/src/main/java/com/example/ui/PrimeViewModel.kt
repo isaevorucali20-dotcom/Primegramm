@@ -58,7 +58,7 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
     private val _pluginDownloadStatus = MutableStateFlow<Map<String, Float>>(emptyMap()) // pluginId to progress (0..1)
     val pluginDownloadStatus: StateFlow<Map<String, Float>> = _pluginDownloadStatus.asStateFlow()
 
-    private val _activeChatId = MutableStateFlow("1") // "1": Arslan, "2": Dev, "3": Mom, "assistant_bot": Stealth Bot
+    private val _activeChatId = MutableStateFlow("prime41k") // Default active chat: prime41k dev
     val activeChatId: StateFlow<String> = _activeChatId.asStateFlow()
 
     val activeChatMessages: StateFlow<List<LocalMessage>>
@@ -130,28 +130,35 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.ensureSeeded()
 
+            // Check and set random user unique ID if not set
+            try {
+                val s = repository.getSettings()
+                if (s.userUniqueId.isEmpty()) {
+                    val randId = (100000..999999).random().toString()
+                    repository.updateSettings(s.copy(userUniqueId = randId))
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
             // Start proactive background conversation loop for active groups and chats to make them feel 100% alive & realistic
             launch {
                 delay(8000)
                 while (true) {
                     val activeId = _activeChatId.value
                     val rand = (1..100).random()
-                    if (rand < 45) {
-                        // Injected random conversational loop for channels and groups
-                        val targetGroup = listOf("ton_hackers", "stealth_leaks").random()
-                        simulateGroupMessage(targetGroup)
-                    } else if (rand < 55) {
+                    if (rand < 55) {
                         // Random user deletes a message mock-event to trigger "Anti-Recall" banner dynamically in front of user
-                        if (activeId == "1" || activeId == "2" || activeId == "alice_private") {
+                        if (activeId == "prime41k") {
                             simulateDeletedMessageTrigger()
                         }
-                    } else if (rand < 65) {
+                    } else if (rand < 75) {
                         // Send one-time self destruct media saved log
-                        if (activeId == "alice_private" || activeId == "1") {
+                        if (activeId == "prime41k") {
                             simulateOneTimeMediaTrigger()
                         }
                     }
-                    delay(20000) // cycle every 20 seconds
+                    delay(30000) // cycle every 30 seconds
                 }
             }
         }
@@ -337,38 +344,32 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         reply
                     }
-                    currentChatId == "ton_hackers" -> {
-                        val responders = listOf("TON_Miner_99", "Durov_Fans", "Hacker_TON")
-                        val responder = responders.random()
+                    currentChatId == "prime41k" -> {
                         when {
-                            draft.contains("TON", ignoreCase = true) || draft.contains("тон", ignoreCase = true) -> 
-                                "($responder): Да, TON Space решает все вопросы напрямую! Без блокировок и костылей, чисто по API."
-                            draft.contains("прокси", ignoreCase = true) || draft.contains("proxy", ignoreCase = true) ->
-                                "($responder): Мы подняли прокси, задержка всего 38мс, обход DPI работает отлично."
+                            draft.contains("привет", ignoreCase = true) || draft.contains("ку", ignoreCase = true) || draft.contains("здравствуй", ignoreCase = true) -> 
+                                "Привет! Рад тебя видеть в Primegram. Как тебе сборка? Полностью переписал ядро на Kotlin Coroutines 🚀"
+                            draft.contains("дела", ignoreCase = true) || draft.contains("как ты", ignoreCase = true) -> 
+                                "Отлично, оптимизировал автопереводы и систему плагинов. Сейчас тестирую Monet Dynamic рендеринг палитр."
+                            draft.contains("плагин", ignoreCase = true) || draft.contains("plugin", ignoreCase = true) -> 
+                                "Движок плагинов Primegram полностью открыт! Ты можешь скопировать код плагина и встроить его во вкладке плагинов."
+                            draft.contains("звезд", ignoreCase = true) || draft.contains("рейтинг", ignoreCase = true) || draft.contains("подар", ignoreCase = true) -> 
+                                "Да, система подарков Telegram-style начисляет звёздные рейтинги. Рядом с твоим именем сразу зажжется щит, кружок или треугольник!"
                             else -> 
-                                "($responder): База! Кстати, кто-то тестировал плагин Premium Star Decorator в Cherrygram? Горит ли премиум звезда?"
-                        }
-                    }
-                    currentChatId == "stealth_leaks" -> {
-                        "Admin_Stealth: Отличный фидбек! Мы инжектируем эти хуки в ядро для ротации IP локально через AES-256."
-                    }
-                    currentChatId == "3" -> { // Mum
-                        when {
-                            draft.contains("привет", ignoreCase = true) || draft.contains("ку", ignoreCase = true) -> "Привет, солнышко моё! Как твои дела? Не устал за компьютером? ❤️"
-                            draft.contains("дела", ignoreCase = true) || draft.contains("нормально", ignoreCase = true) -> "Я очень рада, береги себя! Обязательно покушай хорошо и отдохни 😘"
-                            else -> "Хорошо, дорогой мой. Обнимаю тебя крепко! 😊"
-                        }
-                    }
-                    currentChatId == "1" -> { // Arslan
-                        when {
-                            draft.contains("привет", ignoreCase = true) || draft.contains("ку", ignoreCase = true) -> "О, привет, бро! Рад слышать. Че заценил новые скрытые плагины?"
-                            draft.contains("дела", ignoreCase = true) -> "Все отлично, допиливаю ядро, чтобы обходило DPI в один клик. Пинг огонь!"
-                            draft.contains("плагин", ignoreCase = true) -> "Рекомендую включить 'Anti-Recall Pro' и 'Media Saver Block' - они перехватывают абсолютно все."
-                            else -> "База, бро! Cherrygram реально работает без костылей."
+                                "База! Primegram v3.0 работает полностью без лишней шелухи. Чистая приватность и скорость."
                         }
                     }
                     else -> {
-                        "Привет! Согласен, этот билд Cherrygram работает невероятно шустро."
+                        val nameStr = partner
+                        when {
+                            draft.contains("привет", ignoreCase = true) || draft.contains("ку", ignoreCase = true) -> 
+                                "Привет! Мой уникальный Primegram ID: $currentChatId. Как круто, что ты нашел меня по поиску!"
+                            draft.contains("дела", ignoreCase = true) -> 
+                                "Всё супер! Общаюсь через зашифрованные сокеты Primegram. Сквозное AES-256 работает на ура 🛡️"
+                            draft.contains("подар", ignoreCase = true) || draft.contains("звезд", ignoreCase = true) -> 
+                                "Ого, спасибо за интерес к подаркам! Подари мне какой-нибудь стикер или сувенир, чтобы поднять мой рейтинг звезд!"
+                            else -> 
+                                "Крутая тема! Кстати, ты настроил неоновое свечение в кастомизации своего профиля? Выглядит нереально футуристично ✨"
+                        }
                     }
                 }
             }
@@ -377,7 +378,7 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             repository.insertLocalMessage(
                 LocalMessage(
                     chatUserId = currentChatId,
-                    senderName = if (currentChatId == "ton_hackers") "Durov_Fans" else if (currentChatId == "stealth_leaks") "Admin_Stealth" else partner,
+                    senderName = partner,
                     text = finalReplyText,
                     isMe = false,
                     isTranslated = isTranslated
@@ -467,7 +468,17 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Dynamic Live User Profile Registration
-    fun addChatUser(id: String, displayName: String, username: String, isBot: Boolean = false, botToken: String? = null, botScript: String? = null) {
+    fun addChatUser(
+        id: String, 
+        displayName: String, 
+        username: String, 
+        isBot: Boolean = false, 
+        botToken: String? = null, 
+        botScript: String? = null,
+        bio: String = "Пользователь Primegram ⚡",
+        spentStars: Int = 0,
+        neonGlowColor: String = "Off"
+    ) {
         viewModelScope.launch {
             val user = ChatUser(
                 id = id,
@@ -476,11 +487,14 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                 avatarColor = listOf(0xFFEF5350.toInt(), 0xFF26A69A.toInt(), 0xFFFFCA28.toInt(), 0xFF5C6BC0.toInt(), 0xFFAB47BC.toInt()).random(),
                 isBot = isBot,
                 botToken = botToken,
-                botScript = botScript
+                botScript = botScript,
+                bio = bio,
+                spentStars = spentStars,
+                neonGlowColor = neonGlowColor
             )
             repository.insertChatUser(user)
             // Seed a welcome message
-            val welcomeText = if (isBot) "Привет! Я бот $displayName. Спасибо за интеграцию!" else "Привет! Рад общению в защищенном Cherrygram."
+            val welcomeText = if (isBot) "Привет! Я бот $displayName. Спасибо за интеграцию!" else "Привет! Рад общению в защищенном Primegram."
             repository.insertLocalMessage(
                 LocalMessage(
                     chatUserId = id,
@@ -490,6 +504,95 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                 )
             )
             showToast("Собеседник $displayName добавлен по ID: $id!")
+        }
+    }
+
+    fun purchaseStars(amount: Int) {
+        viewModelScope.launch {
+            val s = repository.getSettings()
+            val updated = s.copy(
+                userSpentStars = s.userSpentStars + amount,
+                userRating = s.userRating + amount / 10
+            )
+            repository.updateSettings(updated)
+            showToast("Приобретено $amount звёзд в Primegram! 🌟")
+        }
+    }
+
+    fun updateUserProfile(
+        displayName: String,
+        username: String,
+        bio: String,
+        avatarStart: Int,
+        avatarEnd: Int,
+        neonGlow: String,
+        uniqueId: String? = null
+    ) {
+        viewModelScope.launch {
+            val s = repository.getSettings()
+            val updated = s.copy(
+                userDisplayName = displayName,
+                userUsername = username,
+                userBio = bio,
+                userAvatarGradientStart = avatarStart,
+                userAvatarGradientEnd = avatarEnd,
+                userNeonGlowColor = neonGlow,
+                userUniqueId = uniqueId ?: s.userUniqueId
+            )
+            repository.updateSettings(updated)
+            showToast("Профиль успешно обновлен! ✨")
+        }
+    }
+
+    fun sendGift(chatUserId: String, giftName: String, starCost: Int) {
+        viewModelScope.launch {
+            val s = repository.getSettings()
+            if (s.userSpentStars < starCost) {
+                // Auto buy gaps
+                val gap = starCost - s.userSpentStars
+                val roundedGap = ((gap / 1000) + 1) * 1000
+                val updatedSpent = s.userSpentStars + roundedGap
+                repository.updateSettings(s.copy(userSpentStars = updatedSpent))
+                showToast("Автоматически приобретено +$roundedGap звёзд для подарка! 🌟")
+            }
+            
+            // Re-fetch and pay
+            val freshSettings = repository.getSettings()
+            val newMeSpent = freshSettings.userSpentStars + starCost
+            repository.updateSettings(freshSettings.copy(userSpentStars = newMeSpent))
+            
+            // Add message
+            repository.insertLocalMessage(
+                LocalMessage(
+                    chatUserId = chatUserId,
+                    senderName = "Me",
+                    text = "🎁 Отправил подарок: '$giftName' стоимостью $starCost звёзд! 🌟",
+                    isMe = true
+                )
+            )
+            
+            val targetUser = chatUsers.value.find { it.id == chatUserId }
+            if (targetUser != null) {
+                val updatedTarget = targetUser.copy(spentStars = targetUser.spentStars + starCost)
+                repository.insertChatUser(updatedTarget)
+                
+                showToast("Подарок '$giftName' успешно отправлен! 🏆")
+                
+                delay(1200)
+                setTypingState(chatUserId, "${targetUser.displayName} отвечает...")
+                delay(1000)
+                clearTypingState(chatUserId)
+                
+                val thanksMessage = "🎁 Спасибо огромное за потрясающий подарок '$giftName'! Мой звёздный рейтинг теперь вырос! ✨"
+                repository.insertLocalMessage(
+                    LocalMessage(
+                        chatUserId = chatUserId,
+                        senderName = targetUser.displayName,
+                        text = thanksMessage,
+                        isMe = false
+                    )
+                )
+            }
         }
     }
 

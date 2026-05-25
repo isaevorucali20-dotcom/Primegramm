@@ -5,6 +5,10 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
+import androidx.compose.ui.platform.LocalContext
+import android.os.Build
+import androidx.compose.material3.dynamicDarkColorScheme
+
 private val MidnightCherryScheme = darkColorScheme(
     primary = CherryPrimary,
     secondary = CherrySecondary,
@@ -88,12 +92,31 @@ fun PrimegramTheme(
     themeName: String,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when (themeName) {
-        "Midnight Cherry" -> MidnightCherryScheme
-        "AMOLED Gold" -> AmoledGoldScheme
-        "Mint Ghost" -> MintGhostScheme
-        "Sapphire Prime" -> SapphirePrimeScheme
-        "Classic Telegram" -> ClassicTelegramScheme
+    val context = LocalContext.current
+    val colorScheme = when {
+        themeName == "Monet Dynamic" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            dynamicDarkColorScheme(context)
+        }
+        themeName == "Monet Dynamic" -> {
+            // High-end pastel Monet style palette fallback
+            darkColorScheme(
+                primary = Color(0xFFD0BCFF),
+                secondary = Color(0xFFCCC2DC),
+                background = Color(0xFF131217),
+                surface = Color(0xFF1E1C24),
+                onPrimary = Color(0xFF381E72),
+                onSecondary = Color(0xFF332D41),
+                onBackground = Color(0xFFE6E1E5),
+                onSurface = Color(0xFFE6E1E5),
+                surfaceVariant = Color(0xFF24222A),
+                onSurfaceVariant = Color(0xFFCAC4D0)
+            )
+        }
+        themeName == "Midnight Cherry" -> MidnightCherryScheme
+        themeName == "AMOLED Gold" -> AmoledGoldScheme
+        themeName == "Mint Ghost" -> MintGhostScheme
+        themeName == "Sapphire Prime" -> SapphirePrimeScheme
+        themeName == "Classic Telegram" -> ClassicTelegramScheme
         else -> ElegantDarkScheme // "Elegant Dark"
     }
 

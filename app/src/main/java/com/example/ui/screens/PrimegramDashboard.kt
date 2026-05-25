@@ -42,6 +42,108 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
+fun StarRatingBadge(spentStars: Int, modifier: Modifier = Modifier) {
+    if (spentStars <= 0) return
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .padding(horizontal = 4.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(
+                when {
+                    spentStars in 1..4999 -> Color(0xFF4CAF50).copy(alpha = 0.15f)
+                    spentStars in 5000..9999 -> Color(0xFF2196F3).copy(alpha = 0.15f)
+                    else -> Color(0xFFFFC107).copy(alpha = 0.15f)
+                }
+            )
+            .border(
+                1.dp,
+                when {
+                    spentStars in 1..4999 -> Color(0xFF4CAF50)
+                    spentStars in 5000..9999 -> Color(0xFF2196F3)
+                    else -> Color(0xFFFFC107)
+                },
+                RoundedCornerShape(6.dp)
+            )
+            .padding(horizontal = 5.dp, vertical = 2.dp)
+    ) {
+        Canvas(modifier = Modifier.size(10.dp)) {
+            val color = when {
+                spentStars in 1..4999 -> Color(0xFF4CAF50)
+                spentStars in 5000..9999 -> Color(0xFF2196F3)
+                else -> Color(0xFFFFC107)
+            }
+            if (spentStars in 1..4999) {
+                // Draw a beautiful custom Shield geometry
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(size.width / 2, 0f)
+                    lineTo(size.width, size.height * 0.25f)
+                    lineTo(size.width, size.height * 0.65f)
+                    quadraticTo(size.width / 2, size.height, 0f, size.height * 0.65f)
+                    lineTo(0f, size.height * 0.25f)
+                    close()
+                }
+                drawPath(path, color)
+            } else if (spentStars in 5000..9999) {
+                // Circle shape
+                drawCircle(color)
+            } else {
+                // Triangle shape
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(size.width / 2, 0f)
+                    lineTo(size.width, size.height)
+                    lineTo(0f, size.height)
+                    close()
+                }
+                drawPath(path, color)
+            }
+        }
+        Spacer(modifier = Modifier.width(3.dp))
+        Text(
+            text = when {
+                spentStars in 1..4999 -> "1"
+                spentStars in 5000..9999 -> "2"
+                else -> "3"
+            },
+            color = when {
+                spentStars in 1..4999 -> Color(0xFF4CAF50)
+                spentStars in 5000..9999 -> Color(0xFF2196F3)
+                else -> Color(0xFFFFC107)
+            },
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+fun ExtraGramDeveloperBadge(modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .padding(horizontal = 4.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(Brush.horizontalGradient(listOf(Color(0xFF00E5FF), Color(0xFF2979FF))))
+            .padding(horizontal = 5.dp, vertical = 2.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.DeveloperMode,
+            contentDescription = "Primegram Premium Dev",
+            tint = Color.White,
+            modifier = Modifier.size(10.dp)
+        )
+        Spacer(modifier = Modifier.width(3.dp))
+        Text(
+            text = "DEV",
+            color = Color.White,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.5.sp
+        )
+    }
+}
+
+@Composable
 fun PrimegramDashboard(
     viewModel: PrimeViewModel,
     modifier: Modifier = Modifier
@@ -51,12 +153,126 @@ fun PrimegramDashboard(
     val context = LocalContext.current
     
     var currentScreen by remember { mutableStateOf("chats") }
+    var showFirstTimeIdSetupDialog by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(activeSettings.userUniqueId) {
+        if (activeSettings.userUniqueId.isEmpty()) {
+            showFirstTimeIdSetupDialog = true
+        }
+    }
 
     PrimegramTheme(themeName = activeSettings.themeName) {
         Surface(
             modifier = modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
+            // First time unique id initialization dialog
+            if (showFirstTimeIdSetupDialog) {
+                Dialog(
+                    onDismissRequest = { },
+                    properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+                ) {
+                    Card(
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .padding(24.dp)
+                                .fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "Добро пожаловать в Primegram!",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Создайте свой уникальный персональный ID для сквозного шифрованного общения, либо продолжите с авто-генерацией безопасного ID.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            
+                            var inputId by remember { mutableStateOf("") }
+                            OutlinedTextField(
+                                value = inputId,
+                                onValueChange = { inputId = it.take(20).filter { char -> char.isLetterOrDigit() || char == '_' } },
+                                label = { Text("Уникальный ID (латиница/цифры)") },
+                                placeholder = { Text("Например: prime_member") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        val randId = (100000..999999).random().toString()
+                                        viewModel.updateUserProfile(
+                                            displayName = activeSettings.userDisplayName.ifEmpty { "Prime Member" },
+                                            username = activeSettings.userUsername.ifEmpty { "prime_member" },
+                                            bio = activeSettings.userBio.ifEmpty { "Пользователь Primegram ⚡" },
+                                            avatarStart = 0xFF5C6BC0.toInt(),
+                                            avatarEnd = 0xFF26A69A.toInt(),
+                                            neonGlow = "Off",
+                                            uniqueId = randId
+                                        )
+                                        showFirstTimeIdSetupDialog = false
+                                        viewModel.showToast("Сгенерирован ID: $randId")
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Рандомный ID")
+                                }
+                                
+                                Button(
+                                    onClick = {
+                                        if (inputId.length < 3) {
+                                            viewModel.showToast("Минимум 3 символа!")
+                                            return@Button
+                                        }
+                                        viewModel.updateUserProfile(
+                                            displayName = activeSettings.userDisplayName.ifEmpty { "Prime Member" },
+                                            username = activeSettings.userUsername.ifEmpty { "prime_member" },
+                                            bio = activeSettings.userBio.ifEmpty { "Пользователь Primegram ⚡" },
+                                            avatarStart = 0xFF5C6BC0.toInt(),
+                                            avatarEnd = 0xFF26A69A.toInt(),
+                                            neonGlow = "Off",
+                                            uniqueId = inputId
+                                        )
+                                        showFirstTimeIdSetupDialog = false
+                                        viewModel.showToast("Создан ID: $inputId")
+                                    },
+                                    enabled = inputId.isNotBlank(),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Готово")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             AnimatedContent(
                 targetState = currentScreen,
                 transitionSpec = {
@@ -106,12 +322,14 @@ fun ChatsScreen(
     var showAddUserDialog by remember { mutableStateOf(false) }
     var showMiniAppsDialog by remember { mutableStateOf(false) }
     var showVaultDialog by remember { mutableStateOf(false) }
+    var showSearchUserDialog by remember { mutableStateOf(false) }
+    var showPartnerProfileDialog by remember { mutableStateOf(false) }
     var activeMiniAppUrl by remember { mutableStateOf<String?>(null) }
     var activeMiniAppName by remember { mutableStateOf("") }
     
     // Parse title_override and online_count overrides from Set API
     val (appTitle, onlineLabel) = remember(activeSettings.setApiJson, activeSettings.ghostModeEnabled) {
-        var title = "Cherrygram Stealth"
+        var title = "Primegram Stealth"
         var online = if (activeSettings.ghostModeEnabled) "Режим призрака активен 👻" else "в сети"
         
         try {
@@ -170,7 +388,11 @@ fun ChatsScreen(
                         }
                     },
                     title = {
-                        Column {
+                        Column(
+                            modifier = Modifier
+                                .clickable { showPartnerProfileDialog = true }
+                                .padding(vertical = 4.dp, horizontal = 4.dp)
+                        ) {
                             Text(
                                 text = viewModel.getChatPartnerName(activeChatId),
                                 style = MaterialTheme.typography.titleMedium,
@@ -201,6 +423,16 @@ fun ChatsScreen(
                         }
                     },
                     actions = {
+                        IconButton(
+                            onClick = { showSearchUserDialog = true },
+                            modifier = Modifier.testTag("search_user_button")
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "Поиск контактов",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                         IconButton(
                             onClick = { showVaultDialog = true },
                             modifier = Modifier.testTag("vault_view_button")
@@ -352,6 +584,21 @@ fun ChatsScreen(
             onDismiss = { showVaultDialog = false }
         )
     }
+
+    if (showSearchUserDialog) {
+        SearchUserDialog(
+            viewModel = viewModel,
+            onDismiss = { showSearchUserDialog = false }
+        )
+    }
+
+    if (showPartnerProfileDialog) {
+        PartnerProfileDialog(
+            viewModel = viewModel,
+            partnerId = activeChatId,
+            onDismiss = { showPartnerProfileDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -365,6 +612,22 @@ fun DrawerMenuContent(
     viewModel: PrimeViewModel
 ) {
     val chatUsers by viewModel.chatUsers.collectAsState()
+    var showProfileEditor by remember { mutableStateOf(false) }
+
+    val userDispName = activeSettings.userDisplayName.ifEmpty { "Prime User" }
+    val userUsrName = activeSettings.userUsername.ifEmpty { "prime_user" }
+    val userBioText = activeSettings.userBio.ifEmpty { "Пользователь безопасного Primegram ⚡" }
+    val userUniqId = activeSettings.userUniqueId.ifEmpty { "ID не задан" }
+
+    // Pulse/neon coloring setup
+    val neonColor = when (activeSettings.userNeonGlowColor) {
+        "Neon Purple" -> Color(0xFFD0BCFF)
+        "Neon Cyan" -> Color(0xFF00E5FF)
+        "Neon Pink" -> Color(0xFFFF4081)
+        "Neon Gold" -> Color(0xFFFFD700)
+        "Neon Green" -> Color(0xFF00E676)
+        else -> null
+    }
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -390,6 +653,7 @@ fun DrawerMenuContent(
                             )
                         )
                     )
+                    .clickable { showProfileEditor = true }
                     .padding(20.dp)
             ) {
                 Column {
@@ -397,51 +661,95 @@ fun DrawerMenuContent(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Custom avatar box with gradients and optional pulsed neon glow borders
                         Box(
-                            modifier = Modifier
-                                .size(50.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                                .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape),
+                            modifier = if (neonColor != null) {
+                                Modifier
+                                    .size(54.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(
+                                                Color(activeSettings.userAvatarGradientStart),
+                                                Color(activeSettings.userAvatarGradientEnd)
+                                            )
+                                        )
+                                    )
+                                    .border(3.dp, neonColor.copy(alpha = 0.35f), CircleShape)
+                                    .border(1.5.dp, neonColor, CircleShape)
+                            } else {
+                                Modifier
+                                    .size(50.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(
+                                                Color(activeSettings.userAvatarGradientStart),
+                                                Color(activeSettings.userAvatarGradientEnd)
+                                            )
+                                        )
+                                    )
+                            },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                Icons.Default.Star,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
+                            Text(
+                                text = userDispName.take(1).uppercase(),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium
                             )
                         }
                         
                         Spacer(modifier = Modifier.width(12.dp))
-
-                        Column {
+ 
+                        Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                val isPremiumActive = viewModel.isPluginInstalled("plugin_premium_status")
                                 Text(
-                                    text = if (isPremiumActive) "Cherry Stealth ⭐" else "Cherry Stealth",
-                                    style = MaterialTheme.typography.titleMedium,
+                                    text = userDispName,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isPremiumActive) Color(0xFFFFD700) else MaterialTheme.colorScheme.onBackground
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Icon(
-                                    Icons.Default.CheckCircle,
-                                    contentDescription = "Верифицирован",
-                                    tint = if (isPremiumActive) Color(0xFFFFD700) else MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                                
+                                // Show developer badge if ID is developer, otherwise show rating stars badge
+                                if (userUniqId == "prime41k") {
+                                    ExtraGramDeveloperBadge()
+                                } else if (activeSettings.userSpentStars > 0) {
+                                    StarRatingBadge(spentStars = activeSettings.userSpentStars)
+                                } else {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = "Верифицирован",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
                             }
                             Text(
-                                text = "@stealth_user",
+                                text = "@$userUsrName (${userUniqId})",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
+ 
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = userBioText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 2.dp)
+                    )
 
                     Spacer(modifier = Modifier.height(14.dp))
-
+ 
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -462,6 +770,171 @@ fun DrawerMenuContent(
                                 fontWeight = FontWeight.Bold,
                                 color = if (activeSettings.ghostModeEnabled) MaterialTheme.colorScheme.primary else Color.Gray
                             )
+                        }
+                    }
+                }
+            }
+
+            // Profile Editor Dialogue Overlay
+            if (showProfileEditor) {
+                Dialog(onDismissRequest = { showProfileEditor = false }) {
+                    Card(
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .padding(20.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = "Настройка Профиля",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            
+                            var editName by remember { mutableStateOf(userDispName) }
+                            var editUsername by remember { mutableStateOf(userUsrName) }
+                            var editBio by remember { mutableStateOf(userBioText) }
+                            var selectedNeonGlow by remember { mutableStateOf(activeSettings.userNeonGlowColor) }
+
+                            var avatarStartColor by remember { mutableStateOf(activeSettings.userAvatarGradientStart) }
+                            var avatarEndColor by remember { mutableStateOf(activeSettings.userAvatarGradientEnd) }
+
+                            OutlinedTextField(
+                                value = editName,
+                                onValueChange = { editName = it },
+                                label = { Text("Имя") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            OutlinedTextField(
+                                value = editUsername,
+                                onValueChange = { editUsername = it },
+                                label = { Text("Имя пользователя (без @)") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            OutlinedTextField(
+                                value = editBio,
+                                onValueChange = { editBio = it },
+                                label = { Text("О себе (био)") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            // Neon glow config row selector
+                            Text("Неоновое свечение профиля:", style = MaterialTheme.typography.labelMedium)
+                            val neonChoices = listOf("Off", "Neon Purple", "Neon Cyan", "Neon Pink", "Neon Gold", "Neon Green")
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                neonChoices.forEach { option ->
+                                    val isSelected = selectedNeonGlow == option
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { selectedNeonGlow = option },
+                                        label = { Text(option) }
+                                    )
+                                }
+                            }
+
+                            // Preset gradient selectors
+                            Text("Стиль градиента аватара:", style = MaterialTheme.typography.labelMedium)
+                            val gradients = listOf(
+                                Pair(0xFF4A148C.toInt(), 0xFF0D47A1.toInt()), // Laser Violet
+                                Pair(0xFFFF4081.toInt(), 0xFFFF5722.toInt()), // Dusk Red
+                                Pair(0xFF00E676.toInt(), 0xFF004D40.toInt()), // Neon Green
+                                Pair(0xFFFFD54F.toInt(), 0xFF5D4037.toInt()), // Amber Brown
+                                Pair(0xFF37474F.toInt(), 0xFF1A237E.toInt())  // Matrix Slate
+                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                gradients.forEach { (start, end) ->
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(Brush.linearGradient(listOf(Color(start), Color(end))))
+                                            .border(
+                                                1.5.dp, 
+                                                if (avatarStartColor == start) MaterialTheme.colorScheme.primary else Color.Transparent, 
+                                                CircleShape
+                                            )
+                                            .clickable {
+                                                avatarStartColor = start
+                                                avatarEndColor = end
+                                            }
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                            // Star Balance Block
+                            Row(
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column {
+                                    Text("Ваши Prime звёзды:", style = MaterialTheme.typography.labelSmall)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            "${activeSettings.userSpentStars} 🌟",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFFFC107)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        if (activeSettings.userSpentStars > 0) {
+                                            StarRatingBadge(spentStars = activeSettings.userSpentStars)
+                                        }
+                                    }
+                                }
+                                Button(
+                                    onClick = { viewModel.purchaseStars(2500) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC107)),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Text("+2500 звёзд", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { showProfileEditor = false },
+                                    modifier = Modifier.weight(1.5f)
+                                ) {
+                                    Text("Вернуться")
+                                }
+                                Button(
+                                    onClick = {
+                                        viewModel.updateUserProfile(
+                                            displayName = editName,
+                                            username = editUsername,
+                                            bio = editBio,
+                                            avatarStart = avatarStartColor,
+                                            avatarEnd = avatarEndColor,
+                                            neonGlow = selectedNeonGlow
+                                        )
+                                        showProfileEditor = false
+                                    },
+                                    modifier = Modifier.weight(1.5f)
+                                ) {
+                                    Text("Сохранить")
+                                }
+                            }
                         }
                     }
                 }
@@ -1926,7 +2399,7 @@ fun PrimegramSettingsScreen(
 
                         Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
 
-                        val themeOptions = listOf("Cosmic Blue Theme", "Ghost Slate Theme", "Emerald Stealth Theme", "Classic Telegram Theme")
+                        val themeOptions = listOf("Elegant Dark", "Midnight Cherry", "AMOLED Gold", "Mint Ghost", "Sapphire Prime", "Classic Telegram", "Monet Dynamic")
                         themeOptions.forEach { themeName ->
                             Row(
                                 modifier = Modifier
@@ -2167,4 +2640,520 @@ fun AddPluginDialog(
             }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SearchUserDialog(
+    viewModel: PrimeViewModel,
+    onDismiss: () -> Unit
+) {
+    val chatUsers by viewModel.chatUsers.collectAsState()
+    var query by remember { mutableStateOf("") }
+    
+    // Create new contact state
+    var isCreatingNew by remember { mutableStateOf(false) }
+    var newId by remember { mutableStateOf("") }
+    var newName by remember { mutableStateOf("") }
+    var newUsername by remember { mutableStateOf("") }
+    var isNewBot by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Поиск контактов",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (!isCreatingNew) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = { Text("Введите ID, имя или @username") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null)
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    val filteredUsers = remember(query, chatUsers) {
+                        if (query.isBlank()) {
+                            chatUsers
+                        } else {
+                            chatUsers.filter {
+                                it.id.contains(query, ignoreCase = true) ||
+                                it.displayName.contains(query, ignoreCase = true) ||
+                                (it.username ?: "").contains(query, ignoreCase = true)
+                            }
+                        }
+                    }
+
+                    if (filteredUsers.isEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Собеседник не найден локально",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    newId = query.take(20).filter { it.isLetterOrDigit() || it == '_' }
+                                    isCreatingNew = true
+                                }
+                            ) {
+                                Text("Создать по ID: $query")
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Результаты поиска:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.heightIn(max = 220.dp)
+                        ) {
+                            items(filteredUsers) { user ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            viewModel.selectChat(user.id)
+                                            onDismiss()
+                                        },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(40.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    Brush.linearGradient(
+                                                        colors = listOf(
+                                                            Color(user.avatarColor),
+                                                            Color(user.avatarColor).copy(alpha = 0.6f)
+                                                        )
+                                                    )
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = user.displayName.take(1).uppercase(),
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 16.sp
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(12.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = user.displayName,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                if (user.id == "prime41k") {
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    ExtraGramDeveloperBadge()
+                                                }
+                                                StarRatingBadge(spentStars = user.spentStars)
+                                            }
+                                            Text(
+                                                text = "ID: ${user.id} • ${user.username ?: ""}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Icon(
+                                            Icons.Default.ArrowForward,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Новый защищенный контакт",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    OutlinedTextField(
+                        value = newId,
+                        onValueChange = { newId = it.take(20).filter { c -> c.isLetterOrDigit() || c == '_' } },
+                        label = { Text("Уникальный ID (латиница)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("Имя контакта") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = newUsername,
+                        onValueChange = { newUsername = it },
+                        label = { Text("Username") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("Например: @member_prime") }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (isCreatingNew) {
+                Button(
+                    onClick = {
+                        if (newId.length < 3) {
+                            viewModel.showToast("ID слишком короткий!")
+                            return@Button
+                        }
+                        if (newName.isBlank()) {
+                            viewModel.showToast("Имя не может быть пустым!")
+                            return@Button
+                        }
+                        viewModel.addChatUser(
+                            id = newId,
+                            displayName = newName,
+                            username = if (newUsername.startsWith("@")) newUsername else "@$newUsername",
+                            isBot = isNewBot
+                        )
+                        viewModel.selectChat(newId)
+                        onDismiss()
+                    }
+                ) {
+                    Text("Открыть чат")
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text("Закрыть")
+                }
+            }
+        },
+        dismissButton = {
+            if (isCreatingNew) {
+                TextButton(onClick = { isCreatingNew = false }) {
+                    Text("Назад")
+                }
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PartnerProfileDialog(
+    viewModel: PrimeViewModel,
+    partnerId: String,
+    onDismiss: () -> Unit
+) {
+    val chatUsers by viewModel.chatUsers.collectAsState()
+    val partner = remember(partnerId, chatUsers) {
+        chatUsers.find { it.id == partnerId }
+    }
+
+    if (partner == null) {
+        onDismiss()
+        return
+    }
+
+    val glowColor = remember(partner.neonGlowColor) {
+        when (partner.neonGlowColor) {
+            "Neon Cyan" -> Color(0xFF00E5FF)
+            "Neon Purple" -> Color(0xFFD500F9)
+            "Neon Gold" -> Color(0xFFFFD600)
+            "Neon Pink" -> Color(0xFFFF4081)
+            else -> null
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Профиль собеседника",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                if (partner.isBot) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = "BOT",
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .size(86.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (glowColor != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(86.dp)
+                                .clip(CircleShape)
+                                .border(3.dp, glowColor.copy(alpha = 0.4f), CircleShape)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .clip(CircleShape)
+                                .border(1.5.dp, glowColor, CircleShape)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        Color(partner.avatarColor),
+                                        Color(partner.avatarColor).copy(alpha = 0.6f)
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = partner.displayName.take(1).uppercase(),
+                            color = Color.White,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = partner.displayName,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        if (partner.id == "prime41k") {
+                            ExtraGramDeveloperBadge()
+                        }
+                    }
+                    Text(
+                        text = partner.username ?: ("@id_" + partner.id),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        StarRatingBadge(spentStars = partner.spentStars)
+                        if (partner.spentStars > 0) {
+                            Text(
+                                text = " • ${partner.spentStars} 🌟 звезд",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "О себе (Bio)",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = partner.bio ?: "Описание отсутствует.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Уникальный ID",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = partner.id,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
+                }
+
+                Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
+
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "🎁 Отправить Telegram Подарок",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Text(
+                        text = "Отправляйте подарки, чтобы повысить звездный статус собеседника. Звезды списываются с вашего баланса.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    val gifts = listOf(
+                        Triple("Серебряная Звезда", 500, "⭐️"),
+                        Triple("Кубок Точности", 1200, "🏆"),
+                        Triple("Алмаз Привата", 5000, "💎"),
+                        Triple("Космический Шаттл", 10000, "🛸")
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        gifts.take(2).forEach { gift ->
+                            GiftCard(gift.first, gift.second, gift.third) {
+                                viewModel.sendGift(partner.id, gift.first, gift.second)
+                                onDismiss()
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        gifts.takeLast(2).forEach { gift ->
+                            GiftCard(gift.first, gift.second, gift.third) {
+                                viewModel.sendGift(partner.id, gift.first, gift.second)
+                                onDismiss()
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Закрыть")
+            }
+        }
+    )
+}
+
+@Composable
+fun RowScope.GiftCard(
+    name: String,
+    cost: Int,
+    icon: String,
+    onSend: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .weight(1f)
+            .clickable { onSend() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = icon,
+                fontSize = 28.sp
+            )
+            Text(
+                text = name,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "$cost 🌟",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
 }

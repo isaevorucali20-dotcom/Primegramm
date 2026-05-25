@@ -34,7 +34,18 @@ data class PrimeSettings(
     val spoofedIpAddress: String = "194.209.14.88",
     
     // Set API configuration
-    val setApiJson: String = "{}"
+    val setApiJson: String = "{}",
+
+    // Profile Customization
+    val userUniqueId: String = "",
+    val userDisplayName: String = "Пользователь Primegram",
+    val userUsername: String = "@user_prime",
+    val userBio: String = "Приватный аккаунт в Primegram ⚡",
+    val userAvatarGradientStart: Int = 0xFF9C27B0.toInt(),
+    val userAvatarGradientEnd: Int = 0xFF3F51B5.toInt(),
+    val userNeonGlowColor: String = "Neon Purple", // Off, Neon Purple, Neon Cyan, Neon Pink, Neon Gold, Neon Green
+    val userSpentStars: Int = 0,
+    val userRating: Int = 100
 )
 
 @Entity(tableName = "deleted_messages")
@@ -103,7 +114,10 @@ data class ChatUser(
     val isBot: Boolean = false,
     val botToken: String? = null,
     val botScript: String? = null, // Rules like "hello->Hi there!;ping->pong"
-    val isLocallyCreated: Boolean = true
+    val isLocallyCreated: Boolean = true,
+    val bio: String = "Пользователь Primegram ⚡",
+    val spentStars: Int = 0,
+    val neonGlowColor: String = "Off"
 )
 
 @Entity(tableName = "local_messages")

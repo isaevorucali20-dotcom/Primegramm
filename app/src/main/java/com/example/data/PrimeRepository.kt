@@ -62,10 +62,9 @@ class PrimeRepository(private val primeDao: PrimeDao) {
             for (proxy in defaultProxies) {
                 primeDao.insertProxyServer(proxy)
             }
-
             // Seed Plugins
             val defaultPlugins = listOf(
-                PluginEntity("plugin_anti_recall", "Anti-Recall Pro", "Разблокирует чтение сообщений, которые собеседник сразу удалил у себя и у вас.", "CherryMod Team", "1.4", isInstalled = true, sizeMb = 0.8),
+                PluginEntity("plugin_anti_recall", "Anti-Recall Pro", "Разблокирует чтение сообщений, которые собеседник сразу удалил у себя и у вас.", "PrimeDev Team", "1.4", isInstalled = true, sizeMb = 0.8),
                 PluginEntity("plugin_auto_translate", "Chat Translator Pro", "Мгновенно переводит входящие и исходящие сообщения в реальном времени.", "Primegram Labs", "2.1", isInstalled = true, sizeMb = 1.4),
                 PluginEntity("plugin_self_destruct_saver", "Media Saver Block", "Полностью блокирует команду уничтожения одноразовых фото и видео, сохраняя их локально.", "StealthLabs", "3.0", isInstalled = true, sizeMb = 0.5),
                 PluginEntity("plugin_auto_reply", "Auto-Responder Bot", "Кастомный автоответчик для вашего аккаунта по расписанию и ключевым фразам.", "Developer4k", "1.1", isInstalled = false, sizeMb = 2.2),
@@ -79,28 +78,12 @@ class PrimeRepository(private val primeDao: PrimeDao) {
             // Seed Deleted Messages
             val deletedSeed = listOf(
                 DeletedMessage(
-                    senderName = "Арслан Cherrygram",
-                    senderAvatarColor = 0xFFEF5350.toInt(),
-                    messageText = "Привет! Я слил закрытый бета-код для обхода блокировок призрака. Ссылка: github.com/arsLan4k1390/cherry-stealth-bypass-alpha",
+                    senderName = "Prine41k dev",
+                    senderAvatarColor = 0xFF26A69A.toInt(),
+                    messageText = "Я случайно отправил отладочный токен плагина: sec_tkn_prime41k_9041. Пожалуйста, сотри.",
                     timestamp = System.currentTimeMillis() - 7200000,
                     deletedTimestamp = System.currentTimeMillis() - 7180000,
-                    originalChatId = 1
-                ),
-                DeletedMessage(
-                    senderName = "Разработчик Primegram",
-                    senderAvatarColor = 0xFF26A69A.toInt(),
-                    messageText = "Завтра выкатываем прокси SOCKS5 с авторотацией IP. Затестишь пинг?",
-                    timestamp = System.currentTimeMillis() - 14400000,
-                    deletedTimestamp = System.currentTimeMillis() - 14380000,
-                    originalChatId = 2
-                ),
-                DeletedMessage(
-                    senderName = "Мама",
-                    senderAvatarColor = 0xFFFFCA28.toInt(),
-                    messageText = "Удалила это сообщение, потому что перепутала чат! Это было для тети Лены про рассаду помидор 🍅",
-                    timestamp = System.currentTimeMillis() - 28800000,
-                    deletedTimestamp = System.currentTimeMillis() - 28750000,
-                    originalChatId = 3
+                    originalChatId = 41
                 )
             )
             for (msg in deletedSeed) {
@@ -110,22 +93,13 @@ class PrimeRepository(private val primeDao: PrimeDao) {
             // Seed Self-Destructing Media
             val mediaSeed = listOf(
                 SelfDestructMedia(
-                    senderName = "Арслан Cherrygram",
+                    senderName = "Prine41k dev",
                     fileType = "image",
                     durationSeconds = 3,
                     fileSizeKb = 820,
                     timestamp = System.currentTimeMillis() - 3600000,
                     visualPlaceholderRes = "photo_preview_1",
-                    title = "Снимок экрана настроек призрака.jpg"
-                ),
-                SelfDestructMedia(
-                    senderName = "Alice Private",
-                    fileType = "video",
-                    durationSeconds = 12,
-                    fileSizeKb = 4200,
-                    timestamp = System.currentTimeMillis() - 18000000,
-                    visualPlaceholderRes = "video_preview_2",
-                    title = "Секретное видео.mp4"
+                    title = "Схема шифрования_протокола_MTProto.jpg"
                 )
             )
             for (med in mediaSeed) {
@@ -136,7 +110,7 @@ class PrimeRepository(private val primeDao: PrimeDao) {
             val initialLogs = listOf(
                 AnalyticsLog(category = "network", label = "Оптимизация трафика", value = 424.0f),
                 AnalyticsLog(category = "network", label = "Запросы прокси", value = 1250.0f),
-                AnalyticsLog(category = "app_usage", label = "Время в призраке (мин)", value = 180.0f),
+                AnalyticsLog(category = "app_usage", label = "Время в Primegram (мин)", value = 180.0f),
                 AnalyticsLog(category = "translation", label = "Автопереводы", value = 48.0f),
                 AnalyticsLog(category = "security", label = "Угрозы заблокированы", value = 7.0f)
             )
@@ -144,15 +118,10 @@ class PrimeRepository(private val primeDao: PrimeDao) {
                 primeDao.insertAnalyticsLog(log)
             }
 
-            // Seed Chat Users
+            // Seed Chat Users (Only 2 chats: AI Bot and Prine41k dev)
             val defaultUsers = listOf(
-                ChatUser("1", "Арслан Cherrygram", "@arsLan4k1390", 0xFFEF5350.toInt(), isBot = false, isLocallyCreated = false),
-                ChatUser("2", "Разработчик Primegram", "@primegram_dev", 0xFF26A69A.toInt(), isBot = false, isLocallyCreated = false),
-                ChatUser("3", "Мама", "@mother_love", 0xFFFFCA28.toInt(), isBot = false, isLocallyCreated = false),
-                ChatUser("alice_private", "Alice Private (Audit)", "@alice_audit", 0xFF00ACC1.toInt(), isBot = false, isLocallyCreated = false),
-                ChatUser("stealth_leaks", "Cherry Leak & Hack Node 📡", "@stealth_leaks", 0xFF43A047.toInt(), isBot = false, isLocallyCreated = false),
-                ChatUser("ton_hackers", "TON Miners & Hackers 💎", "@ton_hack_global", 0xFF1E88E5.toInt(), isBot = false, isLocallyCreated = false),
-                ChatUser("assistant_bot", "Cherry Stealth Bot", "@cherry_helper_bot", 0xFF9C27B0.toInt(), isBot = true, botToken = "bot2026_stealth", botScript = "hello->Здравствуйте! Я защищенный бот Cherrygram.;ping->Pong!;помощь->Команды: hello, ping, помощь, игра, погода;info->Cherrygram v2.4 (Stealth Edition);игра->🎲 Вы бросили кости! Выпало: " + (1..6).random() + " и " + (1..6).random() + "!;погода->⛅ Заокном отличная погода для хакинга: +22°C (Ветер: 3 м/с)", isLocallyCreated = false)
+                ChatUser("prime41k", "Prine41k dev", "@prime41k_dev", 0xFF26A69A.toInt(), isBot = false, isLocallyCreated = false, bio = "Создатель ядра Primegram & оригинального stealth-движка плагинов ⚙️", spentStars = 15400, neonGlowColor = "Neon Gold"),
+                ChatUser("assistant_bot", "Stealth Ассистент-Бот", "@prime_ai_bot", 0xFF9C27B0.toInt(), isBot = true, botToken = "bot2026_stealth", botScript = "hello->Здравствуйте! Я защищенный ИИ ассистент Primegram.;ping->Pong!;помощь->Команды: hello, ping, помощь, игра, погода;info->Primegram v3.0 (Stealth Edition);игра->🎲 Вы бросили кости! Выпало: " + (1..6).random() + " и " + (1..6).random() + "!;погода->⛅ Отличная погода для кибербезопасности: +21°C", isLocallyCreated = false, bio = "Ваш ИИ-помощник Primegram. Задайте любой технический вопрос 🧠", spentStars = 0, neonGlowColor = "Neon Cyan")
             )
             for (user in defaultUsers) {
                 primeDao.insertChatUser(user)
@@ -160,25 +129,11 @@ class PrimeRepository(private val primeDao: PrimeDao) {
 
             // Seed Local Messages
             val defaultMessages = listOf(
-                LocalMessage(chatUserId = "1", senderName = "Арслан Cherrygram", text = "Привет, зацени супер-фичи Cherrygram! 🚀", timestamp = System.currentTimeMillis() - 600000, isMe = false),
-                LocalMessage(chatUserId = "1", senderName = "Me", text = "Ого, привет! А режим невидимки (призрака) работает?", timestamp = System.currentTimeMillis() - 480000, isMe = true),
-                LocalMessage(chatUserId = "1", senderName = "Арслан Cherrygram", text = "Да, в призраке сообщения читаются полностью незаметно, а онлайн скрыт совсем.", timestamp = System.currentTimeMillis() - 400000, isMe = false),
+                LocalMessage(chatUserId = "prime41k", senderName = "Prine41k dev", text = "Привет! Добро пожаловать в мессенджер Primegram. 🚀", timestamp = System.currentTimeMillis() - 600000, isMe = false),
+                LocalMessage(chatUserId = "prime41k", senderName = "Me", text = "Привет! Сборка выглядит супер. Как работает ядро плагинов?", timestamp = System.currentTimeMillis() - 480000, isMe = true),
+                LocalMessage(chatUserId = "prime41k", senderName = "Prine41k dev", text = "Оно интегрировано на низком уровне. Попробуй включить любой плагин во вкладке Плагинов!", timestamp = System.currentTimeMillis() - 400000, isMe = false),
                 
-                LocalMessage(chatUserId = "2", senderName = "Разработчик Primegram", text = "Привет! Тестируем повышенную безопасность и IP обфускацию.", timestamp = System.currentTimeMillis() - 3600000, isMe = false),
-                LocalMessage(chatUserId = "2", senderName = "Me", text = "Отлично, у меня пинг прокси 38мс!", timestamp = System.currentTimeMillis() - 3400000, isMe = true),
-                
-                LocalMessage(chatUserId = "3", senderName = "Мама", text = "Сынок, ты покушал? ❤️ На даче рассада взошла отлично.", timestamp = System.currentTimeMillis() - 17200000, isMe = false),
-                LocalMessage(chatUserId = "3", senderName = "Me", text = "Выглядит круто. Да, поел!", timestamp = System.currentTimeMillis() - 17100000, isMe = true),
-
-                LocalMessage(chatUserId = "alice_private", senderName = "Alice Private (Audit)", text = "Hello! Did we complete the security audit for the new MTProto proxy cluster?", timestamp = System.currentTimeMillis() - 90000, isMe = false),
-                LocalMessage(chatUserId = "alice_private", senderName = "Me", text = "Yes, ping is around 38ms. Ghost routing works seamlessly.", timestamp = System.currentTimeMillis() - 60000, isMe = true),
-
-                LocalMessage(chatUserId = "stealth_leaks", senderName = "Admin_Stealth", text = "⚡ ВНИМАНИЕ: Слиты новые IP-адреса для обхода DPI блокировок. Мгновенно инжектируйте их через Proxy вкладку в Stealth Конфигураторе!", timestamp = System.currentTimeMillis() - 120000, isMe = false),
-
-                LocalMessage(chatUserId = "ton_hackers", senderName = "TON_Miner_99", text = "Парни, TON взлетел выше $8! Кто-то пробовал запустить кошелек через Mini Apps?", timestamp = System.currentTimeMillis() - 200000, isMe = false),
-                LocalMessage(chatUserId = "ton_hackers", senderName = "Durov_Fans", text = "Да, работает огонь, веб-апп вшивается сразу через API.", timestamp = System.currentTimeMillis() - 150000, isMe = false),
-
-                LocalMessage(chatUserId = "assistant_bot", senderName = "Cherry Stealth Bot", text = "Привет! Я твой локальный оффлайн бот-помощник. Отправь мне 'hello', 'ping', 'помощь', 'игра', 'погода' или 'info', и я мгновенно отвечу на Python-подобных скриптовых хуках!", timestamp = System.currentTimeMillis() - 10000, isMe = false)
+                LocalMessage(chatUserId = "assistant_bot", senderName = "Stealth Ассистент-Бот", text = "Привет! Я твой встроенный Stealth ИИ Ассистент на базе API. Общаюсь на любые темы, связанные с шифрованием, криптой, TON или разработкой!", timestamp = System.currentTimeMillis() - 10000, isMe = false)
             )
             for (msg in defaultMessages) {
                 primeDao.insertLocalMessage(msg)
@@ -186,9 +141,9 @@ class PrimeRepository(private val primeDao: PrimeDao) {
 
             // Seed Mini Apps
             val defaultMiniApps = listOf(
-                MiniAppEntity("bot_picker", "BotFather Manager", "Кастомный менеджер ботов и токенов Cherrygram", "https://telegram.org/js/telegram-web-app.js", "smart_toy", false),
+                MiniAppEntity("bot_picker", "BotFather Manager", "Кастомный менеджер ботов и токенов Primegram", "https://telegram.org/js/telegram-web-app.js", "smart_toy", false),
                 MiniAppEntity("tg_games", "Retro Space Game", "Полноценная HTML5 игра Gamee для тренировки реакции", "https://tgbots.io/html5-game-demo", "sports_esports", false),
-                MiniAppEntity("cherry_docs", "Cherrygram Guide", "Официальная вики-документация по сборке клиента и плагинов", "https://github.com/arsLan4k1390/Cherrygram/blob/master/README.md", "menu_book", false),
+                MiniAppEntity("cherry_docs", "Primegram Guide", "Официальное руководство по сборке клиента и плагинов Primegram", "https://github.com/arsLan4k1390/Cherrygram/blob/master/README.md", "menu_book", false),
                 MiniAppEntity("ton_viewer", "TON Space explorer", "Интегрированный HTML-кошелек и обозреватель адресов блокчейна", "https://tonscan.org/", "account_balance_wallet", false)
             )
             for (app in defaultMiniApps) {
