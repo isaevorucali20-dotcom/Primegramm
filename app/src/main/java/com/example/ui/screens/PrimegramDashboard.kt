@@ -417,17 +417,18 @@ fun DrawerMenuContent(
 
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                val isPremiumActive = viewModel.isPluginInstalled("plugin_premium_status")
                                 Text(
-                                    text = "Cherry Stealth",
+                                    text = if (isPremiumActive) "Cherry Stealth ⭐" else "Cherry Stealth",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onBackground
+                                    color = if (isPremiumActive) Color(0xFFFFD700) else MaterialTheme.colorScheme.onBackground
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Icon(
                                     Icons.Default.CheckCircle,
                                     contentDescription = "Верифицирован",
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = if (isPremiumActive) Color(0xFFFFD700) else MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -635,6 +636,10 @@ fun ChatMessageItem(
         MaterialTheme.colorScheme.surfaceVariant
     }
 
+    val isAntiRecallActive = viewModel.isPluginInstalled("plugin_anti_recall")
+    val isMediaSaverActive = viewModel.isPluginInstalled("plugin_self_destruct_saver")
+    var showMediaDialog by remember { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = alignment) {
         Box(
             modifier = Modifier
@@ -650,7 +655,9 @@ fun ChatMessageItem(
                 .background(containerBg)
                 .border(
                     1.dp,
-                    if (message.isDeleted) Color.Red.copy(alpha = 0.5f) else Color.Transparent,
+                    if (message.isDeleted && isAntiRecallActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    else if (message.isDeleted) Color.Red.copy(alpha = 0.5f)
+                    else Color.Transparent,
                     RoundedCornerShape(14.dp)
                 )
                 .padding(12.dp)
@@ -668,29 +675,55 @@ fun ChatMessageItem(
                 }
 
                 if (message.isDeleted) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.GppBad,
-                            contentDescription = null,
-                            tint = Color.Red,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
+                    if (isAntiRecallActive) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Security,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "🛡️ Предотвращено Anti-Recall Pro:",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Удалено собеседником (Перехвачено):",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Red,
-                            fontSize = 11.sp
+                            text = message.text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.Medium
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.GppBad,
+                                contentDescription = null,
+                                tint = Color.Red,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Сообщение удалено собеседником",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Red,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "🚫 Содержимое стерто (Включите Anti-Recall Pro)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                            textDecoration = TextDecoration.LineThrough
                         )
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = message.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                        textDecoration = TextDecoration.LineThrough
-                    )
                 } else {
                     Text(
                         text = message.text,
@@ -715,15 +748,16 @@ fun ChatMessageItem(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.Black.copy(alpha = 0.4f))
-                            .padding(8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.5f))
+                            .clickable { showMediaDialog = true }
+                            .padding(10.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 if (message.isVideoType) Icons.Default.PlayCircle else Icons.Default.Image,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = if (isMediaSaverActive) MaterialTheme.colorScheme.primary else Color.Red,
                                 modifier = Modifier.size(24.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -731,14 +765,15 @@ fun ChatMessageItem(
                                 Text(
                                     text = message.mediaPlaceholder ?: "file.jpg",
                                     style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 10.sp,
-                                    color = Color.White
+                                    fontSize = 11.sp,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "📥 MediaSaver: копия защищена в сейфе!",
+                                    text = if (isMediaSaverActive) "📥 Сейф: перехвачено (нажмите)" else "🔒 Удалено сервером (нажмите)",
                                     style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 8.sp,
-                                    color = Color.White.copy(alpha = 0.7f)
+                                    fontSize = 9.sp,
+                                    color = if (isMediaSaverActive) MaterialTheme.colorScheme.primary else Color.Red.copy(alpha = 0.8f)
                                 )
                             }
                         }
@@ -767,6 +802,93 @@ fun ChatMessageItem(
                 }
             }
         }
+
+    if (showMediaDialog) {
+        AlertDialog(
+            onDismissRequest = { showMediaDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showMediaDialog = false }) {
+                    Text("Закрыть")
+                }
+            },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (isMediaSaverActive) Icons.Default.Security else Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = if (isMediaSaverActive) MaterialTheme.colorScheme.primary else Color.Red
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isMediaSaverActive) "Дешифровано в Сейф" else "Файл заблокирован",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column {
+                    if (isMediaSaverActive) {
+                        Text(
+                            text = "🛡️ Плагин [Media Saver Block] заблокировал команду уничтожения:",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.Black)
+                                .padding(12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    if (message.isVideoType) Icons.Default.PlayCircle else Icons.Default.Image,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = message.mediaPlaceholder ?: "image.jpg",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Размер: ${(100..2500).random()} KB | Формат: ${if (message.isVideoType) "MP4 Видео" else "JPEG Изображение"}",
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "Встроенный дешифратор Cherrygram сохранил локальную копию в Секретном Сейфе. Отправитель уверен, что файл стерт.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else {
+                        Text(
+                            text = "⏳ Файл уничтожен сервером призрака.",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Red,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Собеседник отправил этот медиафайл в одноразовом режиме (Self-destructing). Для автоматического обхода защиты и удержания файлов включите плагин 'Media Saver Block' во вкладке Плагинов!",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+        )
+    }
 
         if (!message.isMe && message.chatUserId == "assistant_bot") {
             Spacer(modifier = Modifier.height(5.dp))
@@ -1147,6 +1269,8 @@ fun MiniAppWebViewDialog(
     appName: String,
     onDismiss: () -> Unit
 ) {
+    var isWebViewSupported by remember { mutableStateOf(true) }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -1178,19 +1302,73 @@ fun MiniAppWebViewDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(paddingValues)
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
                 ) {
-                    AndroidView(
-                        factory = { context ->
-                            WebView(context).apply {
-                                settings.javaScriptEnabled = true
-                                settings.domStorageEnabled = true
-                                webViewClient = WebViewClient()
-                                loadUrl(url)
+                    if (isWebViewSupported) {
+                        AndroidView(
+                            factory = { context ->
+                                try {
+                                    WebView(context).apply {
+                                        settings.javaScriptEnabled = true
+                                        settings.domStorageEnabled = true
+                                        webViewClient = WebViewClient()
+                                        loadUrl(url)
+                                    }
+                                } catch (e: Exception) {
+                                    isWebViewSupported = false
+                                    e.printStackTrace()
+                                    // Fallback to a plain textview to satisfy factory requirement
+                                    android.widget.TextView(context).apply {
+                                        text = "Запуск мини-приложения..."
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Не удалось запустить WebView",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Ваш эмулятор или устройство не имеет установленного\n'Android System WebView'. Вы можете открыть ссылку напрямую в вашем веб-браузере:",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Gray,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                            Button(
+                                onClick = { 
+                                    try {
+                                        uriHandler.openUri(url)
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                    }
+                                }
+                            ) {
+                                Text("Открыть в браузере")
                             }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                        }
+                    }
                 }
             }
         }

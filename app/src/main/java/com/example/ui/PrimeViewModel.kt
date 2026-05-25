@@ -22,6 +22,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import okhttp3.MediaType.Companion.toMediaType
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class PrimeViewModel(application: Application) : AndroidViewModel(application) {
@@ -178,6 +181,105 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Live Database Message Submission
+    fun isPluginInstalled(pluginId: String): Boolean {
+        return plugins.value.any { it.id == pluginId && it.isInstalled }
+    }
+
+    private suspend fun generateGeminiResponse(chatId: String, userPrompt: String): String? {
+        val apiKey = com.example.BuildConfig.GEMINI_API_KEY
+        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY" || apiKey.contains("placeholder", ignoreCase = true)) {
+            return null // Fallback to smart local responder
+        }
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+
+                val systemInstruction = when (chatId) {
+                    "1" -> "Ты — Арслан (@arslan_ton), близкий друг пользователя и крутой разработчик защищенных модов Cherrygram/Telegram. Тебе 24 года. Ты обожаешь TON, крипту, прокси и кибербезопасность. Общаешься на русском разговорном языке с программистским сленгом. Твои ответы должны быть очень краткими (1-3 коротких предложения), живыми и реалистичными, без лишней вежливости, как реальный друг в мессенджере. Используй уместно сленг: бро, рил, софт, TON, база, тема, крипта."
+                    "2" -> "Ты — Ведущий Разработчик Primegram (@prime_developer). Ты создатель ядра этого мессенджера и движка плагинов. Серьезен, умен, вежлив, пишешь лаконично и технически грамотно. Обсуждай с пользователем архитектуру его Cherrygram Stealth, его предложения по доработке плагинов (Anti-Recall, Media Saver, Auto-Responder) или Set API хуки. Отвечай кратко и емко."
+                    "3" -> "Ты — любящая и теплая русская мама пользователя. Ты общаешься очень заботливо, волнуешься за него, спрашиваешь вежливые домашние вещи: покушал ли сыночек, как дела, не устал ли, не дует ли в окно. Используй ласковые слова, смайлики (❤️, 😘, 😊) и пиши просто, жизненно, как типичная мама в мессенджере."
+                    "assistant_bot" -> "Ты — усовершенствованный Stealth Ассистент-Бот. Отвечаешь профессионально о криптографии, шифровании AES-256, протоколе MTProto, настройках прокси и анонимности."
+                    else -> "Ты — собеседник пользователя в приватном чате Cherrygram. Общайся дружелюбно, естественно и кратко."
+                }
+
+                val currentMessagesList = activeChatMessages.value.takeLast(10)
+                val contentsJson = org.json.JSONArray()
+
+                // Insert dialog context
+                currentMessagesList.forEach { msg ->
+                    val role = if (msg.isMe) "user" else "model"
+                    contentsJson.put(org.json.JSONObject().apply {
+                        put("role", role)
+                        put("parts", org.json.JSONArray().apply {
+                            put(org.json.JSONObject().apply {
+                                put("text", msg.text)
+                            })
+                        })
+                    })
+                }
+
+                // Add current prompt if not already in list
+                if (currentMessagesList.none { it.text == userPrompt }) {
+                    contentsJson.put(org.json.JSONObject().apply {
+                        put("role", "user")
+                        put("parts", org.json.JSONArray().apply {
+                            put(org.json.JSONObject().apply {
+                                put("text", userPrompt)
+                            })
+                        })
+                    })
+                }
+
+                val requestJson = org.json.JSONObject().apply {
+                    put("contents", contentsJson)
+                    put("systemInstruction", org.json.JSONObject().apply {
+                        put("parts", org.json.JSONArray().apply {
+                            put(org.json.JSONObject().apply {
+                                put("text", systemInstruction)
+                            })
+                        })
+                    })
+                    put("generationConfig", org.json.JSONObject().apply {
+                        put("temperature", 0.7)
+                    })
+                }
+
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val body = okhttp3.RequestBody.create(mediaType, requestJson.toString())
+
+                val request = okhttp3.Request.Builder()
+                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey")
+                    .post(body)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@withContext null
+                    val resStr = response.body?.string() ?: return@withContext null
+                    val retJson = org.json.JSONObject(resStr)
+                    val candidates = retJson.optJSONArray("candidates")
+                    if (candidates != null && candidates.length() > 0) {
+                        val firstCandidate = candidates.getJSONObject(0)
+                        val content = firstCandidate.optJSONObject("content")
+                        if (content != null) {
+                            val parts = content.optJSONArray("parts")
+                            if (parts != null && parts.length() > 0) {
+                                return@withContext parts.getJSONObject(0).optString("text", null)
+                            }
+                        }
+                    }
+                    null
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
+        }
+    }
+
     fun sendDraftMessage() {
         val draft = _chatDraft.value
         if (draft.isBlank()) return
@@ -196,81 +298,109 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
 
             repository.addAnalyticsLog("app_usage", "Отправлено сообщ.", 1.0f)
             
-            // Context simulation response depending on the chat partner
             val currentUsers = chatUsers.value
             val targetUser = currentUsers.find { it.id == currentChatId }
+            val partner = getChatPartnerName(currentChatId)
 
-            if (targetUser != null && targetUser.isBot) {
-                setTypingState(currentChatId, "${targetUser.displayName} отвечает...")
-                delay(1000)
-                clearTypingState(currentChatId)
-                runLocalBotScript(targetUser, draft)
-            } else if (currentChatId == "ton_hackers") {
-                // Interactive Supergroup Simulation
-                val responders = listOf("TON_Miner_99", "Durov_Fans", "Hacker_TON")
-                val responder = responders.random()
-                
-                setTypingState(currentChatId, "$responder печатает...")
-                delay(1200)
-                clearTypingState(currentChatId)
+            // Auto-Responder Trigger: If auto_rely is active, the bot typing is triggered, let's start typing
+            setTypingState(currentChatId, "$partner печатает...")
+            delay(1200)
+            clearTypingState(currentChatId)
 
-                val replyText = when {
-                    draft.contains("TON", ignoreCase = true) || draft.contains("тон", ignoreCase = true) -> 
-                        "Да, $responder согласен! TON Space решает все вопросы напрямую в приложении без костылей."
-                    draft.contains("прокси", ignoreCase = true) || draft.contains("proxy", ignoreCase = true) ->
-                        "С прокси пинг вообще отличный, соединение шифрованное."
-                    else -> 
-                        "Отличный фидбек! А кто тестил новый плагин Premium Star Decorator, статус сразу горит?"
-                }
-                
-                repository.insertLocalMessage(
-                    LocalMessage(
-                        chatUserId = currentChatId,
-                        senderName = responder,
-                        text = replyText,
-                        isMe = false
-                    )
-                )
-            } else if (currentChatId == "stealth_leaks") {
-                // Interactive Channel Feed Comment Simulation
-                setTypingState(currentChatId, "Admin_Stealth печатает...")
-                delay(1500)
-                clearTypingState(currentChatId)
+            // Try to get response from Gemini
+            val geminiResponse = generateGeminiResponse(currentChatId, draft)
+            val finalReplyText: String
+            val isTranslated: Boolean
 
-                repository.insertLocalMessage(
-                    LocalMessage(
-                        chatUserId = currentChatId,
-                        senderName = "Admin_Stealth",
-                        text = "Записано. Мы уже пересобираем APK-заплатку с добавлением API фич для мини-аппов.",
-                        isMe = false
-                    )
-                )
+            if (geminiResponse != null) {
+                finalReplyText = geminiResponse.trim()
+                isTranslated = isPluginInstalled("plugin_auto_translate")
             } else {
-                // Normal user chat / translation check
-                val partner = getChatPartnerName(currentChatId)
-                setTypingState(currentChatId, "$partner печатает...")
-                delay(1400)
-                clearTypingState(currentChatId)
-
-                val currentSettings = settings.value ?: return@launch
-                if (currentSettings.translatorEnabled) {
-                    simulateLocalTranslatedResponse(currentChatId, draft)
-                } else {
-                    // Simple basic smart response in Russian
-                    val reply = when {
-                        draft.contains("привет", ignoreCase = true) || draft.contains("ку", ignoreCase = true) -> "Привет! Как дела?"
-                        draft.contains("дела", ignoreCase = true) -> "Все отлично, тестирую новые stealth плагины Cherrygram."
-                        else -> "Согласен, этот билд работает очень шустро!"
+                // Highly realistic local smart response fallbacks in case of no key / offline
+                isTranslated = isPluginInstalled("plugin_auto_translate")
+                finalReplyText = when {
+                    targetUser != null && targetUser.isBot -> {
+                        // Custom system bots
+                        var reply = "Бот-Ассистент: Извините, я вас не понял. Отправьте команду 'помощь' для списка функций."
+                        val script = targetUser.botScript ?: ""
+                        val rules = script.split(";")
+                        for (rule in rules) {
+                            val parts = rule.split("->")
+                            if (parts.size == 2) {
+                                val command = parts[0].trim().lowercase()
+                                val response = parts[1].trim()
+                                if (draft.trim().lowercase().contains(command)) {
+                                    reply = response
+                                    break
+                                }
+                            }
+                        }
+                        reply
                     }
-                    repository.insertLocalMessage(
-                        LocalMessage(
-                            chatUserId = currentChatId,
-                            senderName = partner,
-                            text = reply,
-                            isMe = false
-                        )
-                    )
+                    currentChatId == "ton_hackers" -> {
+                        val responders = listOf("TON_Miner_99", "Durov_Fans", "Hacker_TON")
+                        val responder = responders.random()
+                        when {
+                            draft.contains("TON", ignoreCase = true) || draft.contains("тон", ignoreCase = true) -> 
+                                "($responder): Да, TON Space решает все вопросы напрямую! Без блокировок и костылей, чисто по API."
+                            draft.contains("прокси", ignoreCase = true) || draft.contains("proxy", ignoreCase = true) ->
+                                "($responder): Мы подняли прокси, задержка всего 38мс, обход DPI работает отлично."
+                            else -> 
+                                "($responder): База! Кстати, кто-то тестировал плагин Premium Star Decorator в Cherrygram? Горит ли премиум звезда?"
+                        }
+                    }
+                    currentChatId == "stealth_leaks" -> {
+                        "Admin_Stealth: Отличный фидбек! Мы инжектируем эти хуки в ядро для ротации IP локально через AES-256."
+                    }
+                    currentChatId == "3" -> { // Mum
+                        when {
+                            draft.contains("привет", ignoreCase = true) || draft.contains("ку", ignoreCase = true) -> "Привет, солнышко моё! Как твои дела? Не устал за компьютером? ❤️"
+                            draft.contains("дела", ignoreCase = true) || draft.contains("нормально", ignoreCase = true) -> "Я очень рада, береги себя! Обязательно покушай хорошо и отдохни 😘"
+                            else -> "Хорошо, дорогой мой. Обнимаю тебя крепко! 😊"
+                        }
+                    }
+                    currentChatId == "1" -> { // Arslan
+                        when {
+                            draft.contains("привет", ignoreCase = true) || draft.contains("ку", ignoreCase = true) -> "О, привет, бро! Рад слышать. Че заценил новые скрытые плагины?"
+                            draft.contains("дела", ignoreCase = true) -> "Все отлично, допиливаю ядро, чтобы обходило DPI в один клик. Пинг огонь!"
+                            draft.contains("плагин", ignoreCase = true) -> "Рекомендую включить 'Anti-Recall Pro' и 'Media Saver Block' - они перехватывают абсолютно все."
+                            else -> "База, бро! Cherrygram реально работает без костылей."
+                        }
+                    }
+                    else -> {
+                        "Привет! Согласен, этот билд Cherrygram работает невероятно шустро."
+                    }
                 }
+            }
+
+            // Insert response to DB
+            repository.insertLocalMessage(
+                LocalMessage(
+                    chatUserId = currentChatId,
+                    senderName = if (currentChatId == "ton_hackers") "Durov_Fans" else if (currentChatId == "stealth_leaks") "Admin_Stealth" else partner,
+                    text = finalReplyText,
+                    isMe = false,
+                    isTranslated = isTranslated
+                )
+            )
+
+            if (isTranslated) {
+                repository.addAnalyticsLog("translation", "Выполнено автопереводов", 1.0f)
+            }
+
+            // Automatic custom responder plugin trigger! (Auto-Reply)
+            if (isPluginInstalled("plugin_auto_reply")) {
+                delay(1200)
+                val autoResponderMsg = "🤖 [Auto-Responder Pro]: Ваше сообщение получено. Мой аккаунт находится в приватном статусе инкогнито."
+                repository.insertLocalMessage(
+                    LocalMessage(
+                        chatUserId = currentChatId,
+                        senderName = "Me",
+                        text = autoResponderMsg,
+                        isMe = true
+                    )
+                )
+                repository.addAnalyticsLog("app_usage", "Сработал автоответчик", 1.0f)
             }
         }
     }
@@ -418,22 +548,29 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         delay(3500)
 
         // Step 2: Intercept deleted message in Room DB
-        val deletedModel = incomingMsg.copy(isDeleted = true)
-        repository.insertLocalMessage(deletedModel)
+        val isAntiRecallActive = isPluginInstalled("plugin_anti_recall")
+        if (isAntiRecallActive) {
+            val deletedModel = incomingMsg.copy(isDeleted = true, text = phrase)
+            repository.insertLocalMessage(deletedModel)
 
-        // Save to actual deleted logs
-        val dbMsg = DeletedMessage(
-            senderName = partner,
-            senderAvatarColor = indexColor,
-            messageText = phrase,
-            timestamp = System.currentTimeMillis() - 3500,
-            deletedTimestamp = System.currentTimeMillis(),
-            originalChatId = if (currentChatId.all { it.isDigit() }) currentChatId.toIntOrNull() ?: 1 else 1
-        )
-        repository.insertDeletedMessage(dbMsg)
-        repository.addAnalyticsLog("security", "Логи удел. сообщений", 1.0f)
-        
-        showToast("⚠️ Anti-Recall: $partner удалил сообщение! Перехвачено и сохранено.")
+            // Save to actual deleted logs
+            val dbMsg = DeletedMessage(
+                senderName = partner,
+                senderAvatarColor = indexColor,
+                messageText = phrase,
+                timestamp = System.currentTimeMillis() - 3500,
+                deletedTimestamp = System.currentTimeMillis(),
+                originalChatId = if (currentChatId.all { it.isDigit() }) currentChatId.toIntOrNull() ?: 1 else 1
+            )
+            repository.insertDeletedMessage(dbMsg)
+            repository.addAnalyticsLog("security", "Логи удел. сообщений", 1.0f)
+            
+            showToast("📥 Anti-Recall Pro: $partner удалил сообщение, но оно перехвачено и сохранено!")
+        } else {
+            val deletedModel = incomingMsg.copy(isDeleted = true, text = "🚫 Сообщение удалено собеседником")
+            repository.insertLocalMessage(deletedModel)
+            showToast("⚠️ Собеседник $partner удалил сообщение. Включите плагин 'Anti-Recall Pro' для перехвата!")
+        }
     }
 
     suspend fun simulateOneTimeMediaTrigger() {
@@ -445,10 +582,15 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         val fileExtension = if (isVideo) "mp4" else "jpg"
         val mockTitle = if (isVideo) "Секретное видео_${System.currentTimeMillis() % 1000}.$fileExtension" else "Фото-призрак_${System.currentTimeMillis() % 1000}.$fileExtension"
         
+        val isMediaSaverActive = isPluginInstalled("plugin_self_destruct_saver")
+        val mediaText = if (isMediaSaverActive) "🖼 [$fileTypeName, нажмите для просмотра]" else "🖼 [Одноразовое медиа, истекает через 10 сек]"
+
+        val msgId = (10000..99999).random()
         val mediaMsg = LocalMessage(
+            id = msgId,
             chatUserId = currentChatId,
             senderName = partner,
-            text = "🖼 [$fileTypeName, нажмите для просмотра]",
+            text = mediaText,
             isMe = false,
             isOneTimeMedia = true,
             mediaPlaceholder = mockTitle,
@@ -456,22 +598,33 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         )
         repository.insertLocalMessage(mediaMsg)
 
-        delay(2000)
+        if (isMediaSaverActive) {
+            delay(2000)
+            // Primegram intercepts and downloads it to DB!
+            val mediaObj = SelfDestructMedia(
+                senderName = partner,
+                fileType = if (isVideo) "video" else "image",
+                durationSeconds = if (isVideo) (5..20).random() else 0,
+                fileSizeKb = (300..5000).random(),
+                timestamp = System.currentTimeMillis(),
+                visualPlaceholderRes = if (isVideo) "video_preview" else "photo_preview",
+                title = mockTitle
+            )
+            repository.insertSelfDestructMedia(mediaObj)
+            repository.addAnalyticsLog("security", "Сохранено 1-time файлов", 1.0f)
 
-        // Primegram intercepts and downloads it to DB!
-        val mediaObj = SelfDestructMedia(
-            senderName = partner,
-            fileType = if (isVideo) "video" else "image",
-            durationSeconds = if (isVideo) (5..20).random() else 0,
-            fileSizeKb = (300..5000).random(),
-            timestamp = System.currentTimeMillis(),
-            visualPlaceholderRes = if (isVideo) "video_preview" else "photo_preview",
-            title = mockTitle
-        )
-        repository.insertSelfDestructMedia(mediaObj)
-        repository.addAnalyticsLog("security", "Сохранено 1-time файлов", 1.0f)
-
-        showToast("📥 MediaSaver: $partner прислал одноразовое медиа. Копия сохранена в Секретный Сейф!")
+            showToast("📥 Media Saver: Копия одноразового файла от $partner перехвачена и сохранена!")
+        } else {
+            // Auto destruction logic right before their eyes!
+            delay(10000)
+            val expiredMsg = mediaMsg.copy(
+                text = "🔒 Ссылка уничтожена (Включите Media Saver Block)",
+                isOneTimeMedia = false,
+                mediaPlaceholder = "Файл стерт безвозвратно"
+            )
+            repository.insertLocalMessage(expiredMsg)
+            showToast("⚠️ Одноразовый файл от $partner удален сервером. Включите плагин 'Media Saver Block'!")
+        }
     }
 
     // UPDATE AND CONTROL ACTIONS
