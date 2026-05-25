@@ -19,7 +19,11 @@ data class PrimeSettingsEntity(
     val spoofedIpAddress: String = "192.168.1.1",
     val locationSpoof: String = "Off",
     val activeEncryptionLevel: String = "AES-256-GCM",
-    val starsBalance: Int = 12500
+    val starsBalance: Int = 12500,
+    val torTunnelEnabled: Boolean = false,
+    val torOnionAddress: String = "",
+    val p2pDhtEnabled: Boolean = false,
+    val p2pPeerId: String = ""
 )
 
 @Entity(tableName = "chat_users_table")

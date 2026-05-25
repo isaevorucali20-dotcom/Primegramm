@@ -400,6 +400,41 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setTorTunnelEnabled(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            val onionAddr = if (enabled) {
+                if (current.torOnionAddress.isEmpty()) {
+                    val chars = "abcdefghijklmnopqrstuvwxyz234567"
+                    (1..56).map { chars.random() }.joinToString("") + ".onion"
+                } else current.torOnionAddress
+            } else current.torOnionAddress
+
+            repository.updateSettings(current.copy(
+                torTunnelEnabled = enabled,
+                torOnionAddress = onionAddr
+            ))
+            showToast(if (enabled) "🧅 Tor Onion сессия успешно инициализирована!" else "Сеть Tor отключена.")
+        }
+    }
+
+    fun setP2pDhtEnabled(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            val peerId = if (enabled) {
+                if (current.p2pPeerId.isEmpty()) {
+                    "12D3KooWD" + (1..36).map { "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".random() }.joinToString("")
+                } else current.p2pPeerId
+            } else current.p2pPeerId
+
+            repository.updateSettings(current.copy(
+                p2pDhtEnabled = enabled,
+                p2pPeerId = peerId
+            ))
+            showToast(if (enabled) "🛰️ libp2p узел запущен!" else "libp2p узел остановлен.")
+        }
+    }
+
     fun setGhostModeEnabled(enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
             val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()

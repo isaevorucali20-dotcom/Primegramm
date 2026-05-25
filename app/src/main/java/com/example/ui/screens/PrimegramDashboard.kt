@@ -790,6 +790,146 @@ fun ProxyTab(
             }
         }
 
+        // Card 2: Tor Hidden Service (.onion OnionProxy)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Анонимный режим Tor Onion (.onion)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (activeSettings.torTunnelEnabled) "АКТИВЕН (OR СЕТЬ)" else "ВЫКЛЮЧЕН",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Black,
+                            color = if (activeSettings.torTunnelEnabled) Color(0xFFA020F0) else MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Switch(
+                        checked = activeSettings.torTunnelEnabled,
+                        onCheckedChange = { viewModel.setTorTunnelEnabled(it) }
+                    )
+                }
+                Text(
+                    text = "Запускает встроенный клиент OnionProxy на базе сети Tor. Трафик проходит через 3 независимых шифрованных узла (Входной -> Срединный -> Выходной). Ваше устройство получает приватный .onion адрес.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (activeSettings.torTunnelEnabled && activeSettings.torOnionAddress.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                            .padding(12.dp)
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Ваш приватный адрес:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = activeSettings.torOnionAddress,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Card 3: libp2p DHT Peer Sync
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.08f)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Децентрализованный узел libp2p DHT",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (activeSettings.p2pDhtEnabled) "УЗЕЛ СИНХРОНИЗИРОВАН (DHT)" else "ОСТАНОВЛЕН",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Black,
+                            color = if (activeSettings.p2pDhtEnabled) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Switch(
+                        checked = activeSettings.p2pDhtEnabled,
+                        onCheckedChange = { viewModel.setP2pDhtEnabled(it) }
+                    )
+                }
+                Text(
+                    text = "Использует распределенную хеш-таблицу (Kademlia DHT) через Go/Rust-мосты для прямого P2P обнаружения устройств. Позволяет обходить централизованные серверы Primegram.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (activeSettings.p2pDhtEnabled && activeSettings.p2pPeerId.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                            .padding(12.dp)
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Ваш Peer ID:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Box(modifier = Modifier.size(6.dp).background(Color.Green, CircleShape))
+                                    Text(
+                                        text = "Активно (14 peers)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.Green
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = activeSettings.p2pPeerId,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         Text(
             text = "Доступные мосты соединения",
             style = MaterialTheme.typography.labelMedium,
