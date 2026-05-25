@@ -54,6 +54,7 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             setupInitialDatabaseData()
         }
+        startPgpServer()
     }
 
     private suspend fun setupInitialDatabaseData() {
@@ -666,5 +667,85 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                 showToast("🗑️ Собеседник удалил сообщение. Включите Anti-Recall Pro для удержания.")
             }
         }
+    }
+
+    // --- PGP P2P Engine (Primegramm Protocol) ---
+    private val _p2pLogs = MutableStateFlow<List<String>>(emptyList())
+    val p2pLogs: StateFlow<List<String>> = _p2pLogs.asStateFlow()
+
+    private val _p2pServerStatus = MutableStateFlow("Остановлен")
+    val p2pServerStatus: StateFlow<String> = _p2pServerStatus.asStateFlow()
+
+    private val _p2pClientConnected = MutableStateFlow(false)
+    val p2pClientConnected: StateFlow<Boolean> = _p2pClientConnected.asStateFlow()
+
+    private var pgpServer: PgpP2pServer? = null
+    private val pgpClient = PgpP2pClient()
+
+    fun startPgpServer() {
+        viewModelScope.launch {
+            pgpServer?.stop()
+            pgpServer = PgpP2pServer(
+                port = 55555,
+                onMessageReceived = { sender, text ->
+                    viewModelScope.launch(Dispatchers.Main) {
+                        val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                        _p2pLogs.value = _p2pLogs.value + "[$timestamp] Собеседник ($sender): $text"
+                    }
+                },
+                onStatusChanged = { status ->
+                    _p2pServerStatus.value = status
+                }
+            )
+            pgpServer?.start()
+        }
+    }
+
+    fun stopPgpServer() {
+        pgpServer?.stop()
+        _p2pServerStatus.value = "Остановлен"
+    }
+
+    fun connectToPgpPeer(peerIp: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch(Dispatchers.Main) {
+            val success = pgpClient.connectToPeer(peerIp)
+            _p2pClientConnected.value = success
+            onResult(success)
+            if (success) {
+                val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                _p2pLogs.value = _p2pLogs.value + "[$timestamp] 🟢 Успешное подключение к пиру: $peerIp"
+            }
+        }
+    }
+
+    fun disconnectFromPgpPeer() {
+        pgpClient.disconnect()
+        _p2pClientConnected.value = false
+        val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        _p2pLogs.value = _p2pLogs.value + "[$timestamp] 🔴 Отключено от пира"
+    }
+
+    fun sendPgpP2pMessage(text: String) {
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            val sent = pgpClient.sendMessage(text)
+            if (sent) {
+                val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                _p2pLogs.value = _p2pLogs.value + "[$timestamp] Вы: $text"
+            } else {
+                showToast("⚠️ Ошибка отправки: пир не подключен")
+                _p2pClientConnected.value = false
+            }
+        }
+    }
+
+    fun clearP2pLogs() {
+        _p2pLogs.value = emptyList()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        pgpServer?.stop()
+        pgpClient.disconnect()
     }
 }

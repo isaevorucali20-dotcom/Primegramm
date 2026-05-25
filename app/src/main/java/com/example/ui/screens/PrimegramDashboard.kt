@@ -930,6 +930,202 @@ fun ProxyTab(
             }
         }
 
+        // Card 4: PGP P2P TCP Socket Engine
+        val p2pLogs by viewModel.p2pLogs.collectAsState()
+        val p2pServerStatus by viewModel.p2pServerStatus.collectAsState()
+        val p2pClientConnected by viewModel.p2pClientConnected.collectAsState()
+        var peerIpInput by remember { mutableStateOf("") }
+        var p2pMessageInput by remember { mutableStateOf("") }
+        
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Локальный PGP Р2Р Модем (TCP)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(
+                                        if (p2pServerStatus.contains("Слушает")) Color.Green else Color.Red,
+                                        CircleShape
+                                    )
+                            )
+                            Text(
+                                text = "СЕРВЕР: $p2pServerStatus",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    
+                    IconButton(
+                        onClick = {
+                            if (p2pServerStatus.contains("Слушает")) {
+                                viewModel.stopPgpServer()
+                            } else {
+                                viewModel.startPgpServer()
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = if (p2pServerStatus.contains("Слушает")) Icons.Default.Stop else Icons.Default.PlayArrow,
+                            contentDescription = "Тумблер сервера",
+                            tint = if (p2pServerStatus.contains("Слушает")) Color.Green else MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Прямое соединение пир-ту-пир по кастомному бинарному протоколу PGP ([1 байт тип] + [4 байта длина] + [данные]). Работает без интернета через локальный WiFi/IP хосты.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = peerIpInput,
+                        onValueChange = { peerIpInput = it },
+                        label = { Text("IP адрес друга (пира)") },
+                        placeholder = { Text("Напр. 192.168.1.50") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                        trailingIcon = {
+                            if (p2pClientConnected) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Connected",
+                                    tint = Color.Green
+                                )
+                            }
+                        }
+                    )
+
+                    Button(
+                        onClick = {
+                            if (p2pClientConnected) {
+                                viewModel.disconnectFromPgpPeer()
+                            } else {
+                                if (peerIpInput.isNotBlank()) {
+                                    viewModel.connectToPgpPeer(peerIpInput) { _ -> }
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (p2pClientConnected) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(if (p2pClientConnected) "Откл" else "Связь")
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(150.dp)
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(10.dp))
+                        .padding(8.dp)
+                ) {
+                    if (p2pLogs.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Лог сообщений PGP пуст\nПодключитесь и отправьте сообщение",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        val scrollState = rememberScrollState()
+                        LaunchedEffect(p2pLogs.size) {
+                            scrollState.animateScrollTo(scrollState.maxValue)
+                        }
+                        
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scrollState),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            p2pLogs.forEach { log ->
+                                Text(
+                                    text = log,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = if (log.contains("Вы:")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = p2pMessageInput,
+                        onValueChange = { p2pMessageInput = it },
+                        placeholder = { Text("Сообщение PGP...") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        textStyle = MaterialTheme.typography.bodyMedium
+                    )
+
+                    IconButton(
+                        onClick = {
+                            if (p2pMessageInput.isNotBlank()) {
+                                viewModel.sendPgpP2pMessage(p2pMessageInput)
+                                p2pMessageInput = ""
+                            }
+                        },
+                        enabled = p2pClientConnected,
+                        modifier = Modifier.background(
+                            if (p2pClientConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                            CircleShape
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Send,
+                            contentDescription = "Send binary PGP bundle",
+                            tint = if (p2pClientConnected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        )
+                    }
+                }
+                
+                if (p2pLogs.isNotEmpty()) {
+                    TextButton(
+                        onClick = { viewModel.clearP2pLogs() },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Очистить журнал", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+
         Text(
             text = "Доступные мосты соединения",
             style = MaterialTheme.typography.labelMedium,
