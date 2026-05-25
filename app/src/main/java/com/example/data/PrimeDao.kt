@@ -1,117 +1,84 @@
 package com.example.data
 
-import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.Query
-import androidx.room.Update
+import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PrimeDao {
+    @Query("SELECT * FROM settings_table WHERE id = 1 LIMIT 1")
+    fun getSettingsFlow(): Flow<PrimeSettingsEntity?>
 
-    // Settings
-    @Query("SELECT * FROM prime_settings WHERE id = 1")
-    fun getSettingsFlow(): Flow<PrimeSettings?>
-
-    @Query("SELECT * FROM prime_settings WHERE id = 1")
-    suspend fun getSettingsDirect(): PrimeSettings?
+    @Query("SELECT * FROM settings_table WHERE id = 1 LIMIT 1")
+    suspend fun getSettingsDirect(): PrimeSettingsEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSettings(settings: PrimeSettings)
+    suspend fun insertOrUpdateSettings(settings: PrimeSettingsEntity)
 
-    @Update
-    suspend fun updateSettings(settings: PrimeSettings)
+    // Chat Users
+    @Query("SELECT * FROM chat_users_table ORDER BY isBot ASC, displayName ASC")
+    fun getChatUsersFlow(): Flow<List<ChatUserEntity>>
 
-    // Deleted Messages
-    @Query("SELECT * FROM deleted_messages ORDER BY timestamp DESC")
-    fun getDeletedMessagesFlow(): Flow<List<DeletedMessage>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertDeletedMessage(msg: DeletedMessage)
-
-    @Query("DELETE FROM deleted_messages")
-    suspend fun clearDeletedMessages()
-
-    @Query("DELETE FROM deleted_messages WHERE id = :id")
-    suspend fun deleteDeletedMessage(id: Int)
-
-    // Self Destruct Media
-    @Query("SELECT * FROM self_destruct_media ORDER BY timestamp DESC")
-    fun getSelfDestructMediaFlow(): Flow<List<SelfDestructMedia>>
+    @Query("SELECT * FROM chat_users_table WHERE id = :userId LIMIT 1")
+    suspend fun getChatUserDirect(userId: String): ChatUserEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSelfDestructMedia(media: SelfDestructMedia)
+    suspend fun insertOrUpdateChatUser(user: ChatUserEntity)
 
-    @Query("DELETE FROM self_destruct_media")
-    suspend fun clearSelfDestructMedia()
+    @Query("DELETE FROM chat_users_table WHERE id = :userId")
+    suspend fun deleteChatUser(userId: String)
 
-    // Proxy Servers
-    @Query("SELECT * FROM proxy_servers ORDER BY isCustom DESC, id ASC")
-    fun getProxyServersFlow(): Flow<List<ProxyServer>>
+    // Messages
+    @Query("SELECT * FROM messages_table WHERE chatId = :chatId ORDER BY timestamp ASC")
+    fun getMessagesForChatFlow(chatId: String): Flow<List<MessageEntity>>
+
+    @Query("SELECT * FROM messages_table ORDER BY timestamp DESC")
+    fun getAllMessagesFlow(): Flow<List<MessageEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertProxyServer(proxy: ProxyServer)
+    suspend fun insertMessage(message: MessageEntity)
 
-    @Query("DELETE FROM proxy_servers WHERE id = :id")
-    suspend fun deleteProxyServerById(id: Int)
+    @Query("UPDATE messages_table SET isDeletedLocally = 1 WHERE id = :messageId")
+    suspend fun markMessageDeletedLocally(messageId: Long)
+
+    @Query("UPDATE messages_table SET text = :text, isInterceptedDeleted = 1 WHERE id = :messageId")
+    suspend fun markMessageInterceptedDeleted(messageId: Long, text: String)
+
+    @Query("DELETE FROM messages_table WHERE chatId = :chatId")
+    suspend fun clearChatMessages(chatId: String)
+
+    @Query("DELETE FROM messages_table")
+    suspend fun clearAllMessages()
+
+    @Query("UPDATE messages_table SET isTranslated = 1, translatedText = :translatedText WHERE id = :messageId")
+    suspend fun updateMessageTranslation(messageId: Long, translatedText: String)
+
+    // Live Proxies
+    @Query("SELECT * FROM proxy_profiles_table")
+    fun getProxyProfilesFlow(): Flow<List<ProxyProfileEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertProxyProfile(proxy: ProxyProfileEntity)
+
+    @Query("DELETE FROM proxy_profiles_table WHERE id = :proxyId")
+    suspend fun deleteProxy(proxyId: Int)
+
+    // MiniApps
+    @Query("SELECT * FROM miniapps_table")
+    fun getMiniAppsFlow(): Flow<List<MiniAppEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMiniApp(miniApp: MiniAppEntity)
+
+    @Query("DELETE FROM miniapps_table WHERE id = :miniAppId")
+    suspend fun deleteMiniApp(miniAppId: String)
 
     // Plugins
-    @Query("SELECT * FROM plugins ORDER BY name ASC")
+    @Query("SELECT * FROM plugins_table")
     fun getPluginsFlow(): Flow<List<PluginEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPlugin(plugin: PluginEntity)
 
-    @Update
-    suspend fun updatePlugin(plugin: PluginEntity)
-
-    // Analytics Logs
-    @Query("SELECT * FROM analytics_log ORDER BY timestamp DESC LIMIT 100")
-    fun getAnalyticsLogsFlow(): Flow<List<AnalyticsLog>>
-
-    @Query("SELECT * FROM analytics_log WHERE category = :category ORDER BY timestamp DESC")
-    fun getAnalyticsLogsByCategory(category: String): Flow<List<AnalyticsLog>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAnalyticsLog(log: AnalyticsLog)
-    
-    @Query("DELETE FROM analytics_log")
-    suspend fun clearAnalyticsLogs()
-
-    // Chat Users
-    @Query("SELECT * FROM chat_users ORDER BY displayName ASC")
-    fun getChatUsersFlow(): Flow<List<ChatUser>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertChatUser(user: ChatUser)
-
-    @Query("DELETE FROM chat_users WHERE id = :id")
-    suspend fun deleteChatUserById(id: String)
-
-    // Local Messages
-    @Query("SELECT * FROM local_messages WHERE chatUserId = :chatUserId ORDER BY timestamp ASC")
-    fun getLocalMessagesForChatFlow(chatUserId: String): Flow<List<LocalMessage>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertLocalMessage(msg: LocalMessage)
-
-    @Update
-    suspend fun updateLocalMessage(msg: LocalMessage)
-
-    @Query("UPDATE local_messages SET isDeleted = 1 WHERE id = :id")
-    suspend fun markLocalMessageDeleted(id: Int)
-
-    @Query("DELETE FROM local_messages WHERE chatUserId = :chatUserId")
-    suspend fun clearChatHistory(chatUserId: String)
-
-    // Mini Apps
-    @Query("SELECT * FROM mini_apps ORDER BY name ASC")
-    fun getMiniAppsFlow(): Flow<List<MiniAppEntity>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertMiniApp(app: MiniAppEntity)
-
-    @Query("DELETE FROM mini_apps WHERE id = :id")
-    suspend fun deleteMiniAppById(id: String)
+    @Query("UPDATE plugins_table SET isEnabled = :enabled WHERE id = :pluginId")
+    suspend fun setPluginEnabled(pluginId: String, enabled: Boolean)
 }

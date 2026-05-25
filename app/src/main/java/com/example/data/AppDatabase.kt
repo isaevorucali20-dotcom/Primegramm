@@ -7,21 +7,18 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [
-        PrimeSettings::class,
-        DeletedMessage::class,
-        SelfDestructMedia::class,
-        ProxyServer::class,
-        PluginEntity::class,
-        AnalyticsLog::class,
-        ChatUser::class,
-        LocalMessage::class,
-        MiniAppEntity::class
+        PrimeSettingsEntity::class,
+        ChatUserEntity::class,
+        MessageEntity::class,
+        ProxyProfileEntity::class,
+        MiniAppEntity::class,
+        PluginEntity::class
     ],
-    version = 5,
+    version = 1,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
-    abstract fun primeDao(): PrimeDao
+    abstract fun dao(): PrimeDao
 
     companion object {
         @Volatile
@@ -34,8 +31,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "primegram_database"
                 )
-                    .fallbackToDestructiveMigration()
-                    .build()
+                .fallbackToDestructiveMigration()
+                .build()
                 INSTANCE = instance
                 instance
             }

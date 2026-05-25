@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <style name="Theme.MyApplication" parent="android:Theme.DeviceDefault.NoActionBar" />
+    <style name="Theme.Primegram" parent="android:Theme.Material.NoActionBar">
+        <!-- Central status & navigation bar color settings -->
+        <item name="android:statusBarColor">#0D0E15</item>
+        <item name="android:windowLightStatusBar" >false</item>
+        <item name="android:navigationBarColor">#0D0E15</item>
+    </style>
 </resources>

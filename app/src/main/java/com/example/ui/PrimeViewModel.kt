@@ -3,990 +3,633 @@ package com.example.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.data.AppDatabase
-import com.example.data.DeletedMessage
-import com.example.data.PluginEntity
-import com.example.data.PrimeRepository
-import com.example.data.PrimeSettings
-import com.example.data.ProxyServer
-import com.example.data.SelfDestructMedia
-import com.example.data.AnalyticsLog
-import com.example.data.ChatUser
-import com.example.data.LocalMessage
-import com.example.data.MiniAppEntity
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.example.data.*
 import kotlinx.coroutines.Dispatchers
-import okhttp3.MediaType.Companion.toMediaType
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 
-@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class PrimeViewModel(application: Application) : AndroidViewModel(application) {
+    private val database = AppDatabase.getDatabase(application)
+    private val repository = PrimeRepository(database.dao())
 
-    private val repository: PrimeRepository
-    
-    val settings: StateFlow<PrimeSettings?>
-    val deletedMessages: StateFlow<List<DeletedMessage>>
-    val selfDestructMedia: StateFlow<List<SelfDestructMedia>>
-    val proxyServers: StateFlow<List<ProxyServer>>
-    val plugins: StateFlow<List<PluginEntity>>
-    val analyticsLogs: StateFlow<List<AnalyticsLog>>
-    
-    // Live database entities
-    val chatUsers: StateFlow<List<ChatUser>>
-    val miniApps: StateFlow<List<MiniAppEntity>>
+    val settings: StateFlow<PrimeSettingsEntity?> = repository.settings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    // UI Transient States
-    private val _typingState = MutableStateFlow<Map<String, String>>(emptyMap()) // chatId to status description
-    val typingState: StateFlow<Map<String, String>> = _typingState.asStateFlow()
+    val chatUsers: StateFlow<List<ChatUserEntity>> = repository.chatUsers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val proxies: StateFlow<List<ProxyProfileEntity>> = repository.proxies
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val miniApps: StateFlow<List<MiniAppEntity>> = repository.miniApps
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val plugins: StateFlow<List<PluginEntity>> = repository.plugins
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val currentChatId = MutableStateFlow<String?>(null)
+
+    val currentChatMessages: StateFlow<List<MessageEntity>> = currentChatId
+        .flatMapLatest { chatId ->
+            if (chatId == null) flowOf(emptyList())
+            else repository.getMessagesForChat(chatId)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
 
-    private val _isSyncing = MutableStateFlow(false)
-    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
-
-    private val _isCleaningCache = MutableStateFlow(false)
-    val isCleaningCache: StateFlow<Boolean> = _isCleaningCache.asStateFlow()
-
-    private val _pluginDownloadStatus = MutableStateFlow<Map<String, Float>>(emptyMap()) // pluginId to progress (0..1)
-    val pluginDownloadStatus: StateFlow<Map<String, Float>> = _pluginDownloadStatus.asStateFlow()
-
-    private val _activeChatId = MutableStateFlow("prime41k") // Default active chat: prime41k dev
-    val activeChatId: StateFlow<String> = _activeChatId.asStateFlow()
-
-    val activeChatMessages: StateFlow<List<LocalMessage>>
-
-    private val _chatDraft = MutableStateFlow("")
-    val chatDraft: StateFlow<String> = _chatDraft.asStateFlow()
+    private val _isBotTyping = MutableStateFlow(false)
+    val isBotTyping: StateFlow<Boolean> = _isBotTyping.asStateFlow()
 
     init {
-        val database = AppDatabase.getDatabase(application)
-        repository = PrimeRepository(database.primeDao())
+        // Initialize Default Values if Empty
+        viewModelScope.launch(Dispatchers.IO) {
+            setupInitialDatabaseData()
+        }
+    }
 
-        settings = repository.settings.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = null
-        )
+    private suspend fun setupInitialDatabaseData() {
+        // 1. Initial Settings
+        val existingSettings = repository.getSettingsDirect()
+        if (existingSettings == null) {
+            repository.updateSettings(PrimeSettingsEntity())
+        }
 
-        deletedMessages = repository.deletedMessages.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+        // 2. Chat Users
+        val existingUsers = repository.chatUsers.first()
+        if (existingUsers.isEmpty()) {
+            val devUser = ChatUserEntity(
+                id = "prime41k",
+                displayName = "Святослав Prime",
+                username = "@developer_prime",
+                bio = "Разработчик ядра Primegram. Пишите по любым багам и предложениям 🛡️",
+                isBot = false,
+                avatarColor = 0xFFE040FB, // Vibrant magenta
+                neonGlowColor = "Neon Pink",
+                spentStars = 250
+            )
+            val supportBot = ChatUserEntity(
+                id = "prime_gpt_bot",
+                displayName = "Prime Secure AI",
+                username = "@prime_gpt_bot",
+                bio = "Защищенный локальный ассистент на базе модели Gemini.",
+                isBot = true,
+                avatarColor = 0xFF00E5FF, // Neon cyan
+                neonGlowColor = "Neon Cyan"
+            )
+            repository.insertOrUpdateChatUser(devUser)
+            repository.insertOrUpdateChatUser(supportBot)
 
-        selfDestructMedia = repository.selfDestructMedia.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-        proxyServers = repository.proxyServers.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-        plugins = repository.plugins.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-        analyticsLogs = repository.analyticsLogs.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-        chatUsers = repository.chatUsers.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-        miniApps = repository.miniApps.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-        activeChatMessages = _activeChatId
-            .flatMapLatest { id -> repository.getLocalMessagesForChat(id) }
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(5000),
-                initialValue = emptyList()
+            // Insert initial welcome messages
+            repository.insertMessage(
+                MessageEntity(
+                    chatId = "prime41k",
+                    senderId = "prime41k",
+                    text = "Привет! Добро пожаловать в Primegram — защищенный модифицированный Telegram-клиент нового поколения. 🚀\n\nЗдесь все сообщения шифруются локально, а плагины Anti-Recall Pro и Media Saver перехватывают любые удаленные данные и одноразовые фото.",
+                    timestamp = System.currentTimeMillis() - 60000
+                )
             )
 
-        // Seed data on startup
-        viewModelScope.launch {
-            repository.ensureSeeded()
+            repository.insertMessage(
+                MessageEntity(
+                    chatId = "prime_gpt_bot",
+                    senderId = "prime_gpt_bot",
+                    text = "Приветствую! Я защищенный AI ассистент Primegram. Будьте уверены: наши диалоги шифруются сквозным методом по стандарту AES-256-GCM. 🛡️\n\nЗадайте мне любой вопрос!",
+                    timestamp = System.currentTimeMillis() - 50000
+                )
+            )
+        }
 
-            // Check and set random user unique ID if not set
-            try {
-                val s = repository.getSettings()
-                if (s.userUniqueId.isEmpty()) {
-                    val randId = (100000..999999).random().toString()
-                    repository.updateSettings(s.copy(userUniqueId = randId))
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+        // 3. Mini Apps
+        val existingApps = repository.miniApps.first()
+        if (existingApps.isEmpty()) {
+            repository.insertMiniApp(
+                MiniAppEntity(
+                    id = "star_tap",
+                    name = "Star Tapper",
+                    description = "Кликер для заработка звезд Telegram",
+                    url = "https://isizg-stars.web.app",
+                    iconEmoji = "🌟"
+                )
+            )
+            repository.insertMiniApp(
+                MiniAppEntity(
+                    id = "ton_wheel",
+                    name = "Prime Spin Wheel",
+                    description = "Колесо фортуны с раздачей токенов",
+                    url = "https://spin-wheel-game.web.app",
+                    iconEmoji = "🎡"
+                )
+            )
+        }
 
-            // Start proactive background conversation loop for active groups and chats to make them feel 100% alive & realistic
-            launch {
-                delay(8000)
-                while (true) {
-                    val activeId = _activeChatId.value
-                    val rand = (1..100).random()
-                    if (rand < 55) {
-                        // Random user deletes a message mock-event to trigger "Anti-Recall" banner dynamically in front of user
-                        if (activeId == "prime41k") {
-                            simulateDeletedMessageTrigger()
-                        }
-                    } else if (rand < 75) {
-                        // Send one-time self destruct media saved log
-                        if (activeId == "prime41k") {
-                            simulateOneTimeMediaTrigger()
-                        }
-                    }
-                    delay(30000) // cycle every 30 seconds
-                }
-            }
+        // 4. Default Live Proxy Configs
+        val existingProxies = repository.proxies.first()
+        if (existingProxies.isEmpty()) {
+            repository.insertProxyProfile(
+                ProxyProfileEntity(
+                    title = "MTProto Secure Proxy (Luxembourg)",
+                    host = "lux-mtproto.primegram.org",
+                    port = 443,
+                    secret = "dd000102030405060708090a0b0c0d0e0f",
+                    isCurrentlyActive = true
+                )
+            )
+            repository.insertProxyProfile(
+                ProxyProfileEntity(
+                    title = "Shadowsocks Onion Tunnel (Netherlands)",
+                    host = "nl-onion.primegram.org",
+                    port = 8388,
+                    secret = "chacha20-ietf-poly1305:primegramtunnel",
+                    isCurrentlyActive = false
+                )
+            )
+        }
+
+        // 5. Hardcoded Engine Plugins
+        val existingPlugins = repository.plugins.first()
+        if (existingPlugins.isEmpty()) {
+            repository.insertPlugin(
+                PluginEntity(
+                    id = "anti_recall",
+                    name = "Anti-Recall Pro",
+                    version = "v3.1",
+                    isEnabled = true,
+                    type = "System Core",
+                    description = "Перехватывает и сохраняет сообщения, которые собеседник пытается удалить из диалога."
+                )
+            )
+            repository.insertPlugin(
+                PluginEntity(
+                    id = "media_saver",
+                    name = "Media Saver Block",
+                    version = "v2.0",
+                    isEnabled = true,
+                    type = "System Core",
+                    description = "Блокирует таймеры уничтожения одноразовых медиафайлов и сохраняет их копию."
+                )
+            )
+            repository.insertPlugin(
+                PluginEntity(
+                    id = "ip_spoofer",
+                    name = "IP/Location Kernel Spoofer",
+                    version = "v1.4b",
+                    isEnabled = false,
+                    type = "Inject Mod",
+                    description = "Подменяет ваш реальный IP и географические координаты на уровне сокетов соединения."
+                )
+            )
+            repository.insertPlugin(
+                PluginEntity(
+                    id = "ghost_mode",
+                    name = "Ghost-Mode System",
+                    version = "v5.2",
+                    isEnabled = false,
+                    type = "Inject Mod",
+                    description = "Полностью скрывает статус релиза ('в сети', 'печатает') и не помечает сообщения прочитанными."
+                )
+            )
         }
     }
 
     fun showToast(message: String) {
-        viewModelScope.launch {
-            _toastMessage.value = message
-            delay(3000)
-            if (_toastMessage.value == message) {
-                _toastMessage.value = null
-            }
-        }
+        _toastMessage.value = message
     }
 
     fun clearToast() {
         _toastMessage.value = null
     }
 
-    fun selectChat(id: String) {
-        _activeChatId.value = id
-        _chatDraft.value = ""
+    fun selectChat(chatId: String?) {
+        currentChatId.value = chatId
     }
 
-    fun updateDraft(text: String) {
-        _chatDraft.value = text
-    }
-
-    // Live Database Message Submission
-    fun isPluginInstalled(pluginId: String): Boolean {
-        return plugins.value.any { it.id == pluginId && it.isInstalled }
-    }
-
-    private suspend fun generateGeminiResponse(chatId: String, userPrompt: String): String? {
-        val apiKey = com.example.BuildConfig.GEMINI_API_KEY
-        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY" || apiKey.contains("placeholder", ignoreCase = true)) {
-            return null // Fallback to smart local responder
-        }
-
-        return withContext(Dispatchers.IO) {
-            try {
-                val client = okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                    .build()
-
-                val systemInstruction = when (chatId) {
-                    "1" -> "Ты — Арслан (@arslan_ton), близкий друг пользователя и крутой разработчик защищенных модов Cherrygram/Telegram. Тебе 24 года. Ты обожаешь TON, крипту, прокси и кибербезопасность. Общаешься на русском разговорном языке с программистским сленгом. Твои ответы должны быть очень краткими (1-3 коротких предложения), живыми и реалистичными, без лишней вежливости, как реальный друг в мессенджере. Используй уместно сленг: бро, рил, софт, TON, база, тема, крипта."
-                    "2" -> "Ты — Ведущий Разработчик Primegram (@prime_developer). Ты создатель ядра этого мессенджера и движка плагинов. Серьезен, умен, вежлив, пишешь лаконично и технически грамотно. Обсуждай с пользователем архитектуру его Cherrygram Stealth, его предложения по доработке плагинов (Anti-Recall, Media Saver, Auto-Responder) или Set API хуки. Отвечай кратко и емко."
-                    "3" -> "Ты — любящая и теплая русская мама пользователя. Ты общаешься очень заботливо, волнуешься за него, спрашиваешь вежливые домашние вещи: покушал ли сыночек, как дела, не устал ли, не дует ли в окно. Используй ласковые слова, смайлики (❤️, 😘, 😊) и пиши просто, жизненно, как типичная мама в мессенджере."
-                    "assistant_bot" -> "Ты — усовершенствованный Stealth Ассистент-Бот. Отвечаешь профессионально о криптографии, шифровании AES-256, протоколе MTProto, настройках прокси и анонимности."
-                    else -> "Ты — собеседник пользователя в приватном чате Cherrygram. Общайся дружелюбно, естественно и кратко."
-                }
-
-                val currentMessagesList = activeChatMessages.value.takeLast(10)
-                val contentsJson = org.json.JSONArray()
-
-                // Insert dialog context
-                currentMessagesList.forEach { msg ->
-                    val role = if (msg.isMe) "user" else "model"
-                    contentsJson.put(org.json.JSONObject().apply {
-                        put("role", role)
-                        put("parts", org.json.JSONArray().apply {
-                            put(org.json.JSONObject().apply {
-                                put("text", msg.text)
-                            })
-                        })
-                    })
-                }
-
-                // Add current prompt if not already in list
-                if (currentMessagesList.none { it.text == userPrompt }) {
-                    contentsJson.put(org.json.JSONObject().apply {
-                        put("role", "user")
-                        put("parts", org.json.JSONArray().apply {
-                            put(org.json.JSONObject().apply {
-                                put("text", userPrompt)
-                            })
-                        })
-                    })
-                }
-
-                val requestJson = org.json.JSONObject().apply {
-                    put("contents", contentsJson)
-                    put("systemInstruction", org.json.JSONObject().apply {
-                        put("parts", org.json.JSONArray().apply {
-                            put(org.json.JSONObject().apply {
-                                put("text", systemInstruction)
-                            })
-                        })
-                    })
-                    put("generationConfig", org.json.JSONObject().apply {
-                        put("temperature", 0.7)
-                    })
-                }
-
-                val mediaType = "application/json; charset=utf-8".toMediaType()
-                val body = okhttp3.RequestBody.create(mediaType, requestJson.toString())
-
-                val request = okhttp3.Request.Builder()
-                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey")
-                    .post(body)
-                    .build()
-
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@withContext null
-                    val resStr = response.body?.string() ?: return@withContext null
-                    val retJson = org.json.JSONObject(resStr)
-                    val candidates = retJson.optJSONArray("candidates")
-                    if (candidates != null && candidates.length() > 0) {
-                        val firstCandidate = candidates.getJSONObject(0)
-                        val content = firstCandidate.optJSONObject("content")
-                        if (content != null) {
-                            val parts = content.optJSONArray("parts")
-                            if (parts != null && parts.length() > 0) {
-                                return@withContext parts.getJSONObject(0).optString("text", null)
-                            }
-                        }
-                    }
-                    null
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
-            }
-        }
-    }
-
-    fun sendDraftMessage() {
-        val draft = _chatDraft.value
-        if (draft.isBlank()) return
-
-        val currentChatId = _activeChatId.value
-        
-        viewModelScope.launch {
-            val userMsg = LocalMessage(
-                chatUserId = currentChatId,
-                senderName = "Me",
-                text = draft,
-                isMe = true
-            )
-            repository.insertLocalMessage(userMsg)
-            _chatDraft.value = ""
-
-            repository.addAnalyticsLog("app_usage", "Отправлено сообщ.", 1.0f)
-            
-            val currentUsers = chatUsers.value
-            val targetUser = currentUsers.find { it.id == currentChatId }
-            val partner = getChatPartnerName(currentChatId)
-
-            // Auto-Responder Trigger: If auto_rely is active, the bot typing is triggered, let's start typing
-            setTypingState(currentChatId, "$partner печатает...")
-            delay(1200)
-            clearTypingState(currentChatId)
-
-            // Try to get response from Gemini
-            val geminiResponse = generateGeminiResponse(currentChatId, draft)
-            val finalReplyText: String
-            val isTranslated: Boolean
-
-            if (geminiResponse != null) {
-                finalReplyText = geminiResponse.trim()
-                isTranslated = isPluginInstalled("plugin_auto_translate")
-            } else {
-                // Highly realistic local smart response fallbacks in case of no key / offline
-                isTranslated = isPluginInstalled("plugin_auto_translate")
-                finalReplyText = when {
-                    targetUser != null && targetUser.isBot -> {
-                        // Custom system bots
-                        var reply = "Бот-Ассистент: Извините, я вас не понял. Отправьте команду 'помощь' для списка функций."
-                        val script = targetUser.botScript ?: ""
-                        val rules = script.split(";")
-                        for (rule in rules) {
-                            val parts = rule.split("->")
-                            if (parts.size == 2) {
-                                val command = parts[0].trim().lowercase()
-                                val response = parts[1].trim()
-                                if (draft.trim().lowercase().contains(command)) {
-                                    reply = response
-                                    break
-                                }
-                            }
-                        }
-                        reply
-                    }
-                    currentChatId == "prime41k" -> {
-                        when {
-                            draft.contains("привет", ignoreCase = true) || draft.contains("ку", ignoreCase = true) || draft.contains("здравствуй", ignoreCase = true) -> 
-                                "Привет! Рад тебя видеть в Primegram. Как тебе сборка? Полностью переписал ядро на Kotlin Coroutines 🚀"
-                            draft.contains("дела", ignoreCase = true) || draft.contains("как ты", ignoreCase = true) -> 
-                                "Отлично, оптимизировал автопереводы и систему плагинов. Сейчас тестирую Monet Dynamic рендеринг палитр."
-                            draft.contains("плагин", ignoreCase = true) || draft.contains("plugin", ignoreCase = true) -> 
-                                "Движок плагинов Primegram полностью открыт! Ты можешь скопировать код плагина и встроить его во вкладке плагинов."
-                            draft.contains("звезд", ignoreCase = true) || draft.contains("рейтинг", ignoreCase = true) || draft.contains("подар", ignoreCase = true) -> 
-                                "Да, система подарков Telegram-style начисляет звёздные рейтинги. Рядом с твоим именем сразу зажжется щит, кружок или треугольник!"
-                            else -> 
-                                "База! Primegram v3.0 работает полностью без лишней шелухи. Чистая приватность и скорость."
-                        }
-                    }
-                    else -> {
-                        val nameStr = partner
-                        when {
-                            draft.contains("привет", ignoreCase = true) || draft.contains("ку", ignoreCase = true) -> 
-                                "Привет! Мой уникальный Primegram ID: $currentChatId. Как круто, что ты нашел меня по поиску!"
-                            draft.contains("дела", ignoreCase = true) -> 
-                                "Всё супер! Общаюсь через зашифрованные сокеты Primegram. Сквозное AES-256 работает на ура 🛡️"
-                            draft.contains("подар", ignoreCase = true) || draft.contains("звезд", ignoreCase = true) -> 
-                                "Ого, спасибо за интерес к подаркам! Подари мне какой-нибудь стикер или сувенир, чтобы поднять мой рейтинг звезд!"
-                            else -> 
-                                "Крутая тема! Кстати, ты настроил неоновое свечение в кастомизации своего профиля? Выглядит нереально футуристично ✨"
-                        }
-                    }
-                }
-            }
-
-            // Insert response to DB
-            repository.insertLocalMessage(
-                LocalMessage(
-                    chatUserId = currentChatId,
-                    senderName = partner,
-                    text = finalReplyText,
-                    isMe = false,
-                    isTranslated = isTranslated
-                )
-            )
-
-            if (isTranslated) {
-                repository.addAnalyticsLog("translation", "Выполнено автопереводов", 1.0f)
-            }
-
-            // Automatic custom responder plugin trigger! (Auto-Reply)
-            if (isPluginInstalled("plugin_auto_reply")) {
-                delay(1200)
-                val autoResponderMsg = "🤖 [Auto-Responder Pro]: Ваше сообщение получено. Мой аккаунт находится в приватном статусе инкогнито."
-                repository.insertLocalMessage(
-                    LocalMessage(
-                        chatUserId = currentChatId,
-                        senderName = "Me",
-                        text = autoResponderMsg,
-                        isMe = true
-                    )
-                )
-                repository.addAnalyticsLog("app_usage", "Сработал автоответчик", 1.0f)
-            }
-        }
-    }
-
-    private suspend fun runLocalBotScript(bot: ChatUser, userText: String) {
-        delay(800)
-        val script = bot.botScript ?: ""
-        var botReply = "Извините, я вас не понял. Отправьте команду 'помощь' для списка функций."
-        
-        // Simple python-like logic parser
-        val rules = script.split(";")
-        for (rule in rules) {
-            val parts = rule.split("->")
-            if (parts.size == 2) {
-                val command = parts[0].trim().lowercase()
-                val response = parts[1].trim()
-                if (userText.trim().lowercase().contains(command)) {
-                    botReply = response
-                    break
-                }
-            }
-        }
-
-        val botMsg = LocalMessage(
-            chatUserId = bot.id,
-            senderName = bot.displayName,
-            text = botReply,
-            isMe = false
-        )
-        repository.insertLocalMessage(botMsg)
-        repository.addAnalyticsLog("app_usage", "Бот API: ответ от ${bot.username}", 1.0f)
-    }
-
-    private suspend fun simulateLocalTranslatedResponse(chatUserId: String, triggerText: String) {
-        val partner = getChatPartnerName(chatUserId)
-        val responseText = when {
-            triggerText.contains("привет", ignoreCase = true) || triggerText.contains("hi", ignoreCase = true) -> 
-                "[Встроенный переводчик с English]: Hey there! This is an auto-translated response."
-            triggerText.contains("тест", ignoreCase = true) -> 
-                "[Встроенный переводчик]: Translation Service is fully operational (Ping: 10ms)"
-            else -> 
-                "[Встроенный переводчик]: Detected text. Translating into: ${settings.value?.translationTargetLanguage ?: "Русский"}"
-        }
-
-        val autoReply = LocalMessage(
-            chatUserId = chatUserId,
-            senderName = partner,
-            text = responseText,
-            isMe = false,
-            isTranslated = true
-        )
-        repository.insertLocalMessage(autoReply)
-        repository.addAnalyticsLog("translation", "Выполнено переводов", 1.0f)
-    }
-
-    // Visual Set API Overrides Editor
-    fun updateSetApiConfig(json: String) {
-        viewModelScope.launch {
-            val current = repository.getSettings()
-            val updated = current.copy(setApiJson = json)
-            repository.updateSettings(updated)
-            showToast("⚙️ Set API: Конфигурация успешно применена локально!")
-        }
-    }
-
-    // Dynamic Live User Profile Registration
     fun addChatUser(
-        id: String, 
-        displayName: String, 
-        username: String, 
-        isBot: Boolean = false, 
-        botToken: String? = null, 
-        botScript: String? = null,
-        bio: String = "Пользователь Primegram ⚡",
-        spentStars: Int = 0,
-        neonGlowColor: String = "Off"
+        id: String,
+        displayName: String,
+        username: String?,
+        isBot: Boolean = false,
+        botToken: String? = null,
+        botScript: String? = null
     ) {
-        viewModelScope.launch {
-            val user = ChatUser(
+        viewModelScope.launch(Dispatchers.IO) {
+            val user = ChatUserEntity(
                 id = id,
                 displayName = displayName,
                 username = username,
-                avatarColor = listOf(0xFFEF5350.toInt(), 0xFF26A69A.toInt(), 0xFFFFCA28.toInt(), 0xFF5C6BC0.toInt(), 0xFFAB47BC.toInt()).random(),
+                bio = if (isBot) "Пользовательский бот Primegram." else "Локальный защищенный контакт.",
                 isBot = isBot,
+                avatarColor = listOf(0xFF2196F3L, 0xFFE040FBL, 0xFF00E5FFL, 0xFF00E676L, 0xFFFF4081L).random(),
                 botToken = botToken,
-                botScript = botScript,
-                bio = bio,
-                spentStars = spentStars,
-                neonGlowColor = neonGlowColor
+                botScript = botScript
             )
-            repository.insertChatUser(user)
-            // Seed a welcome message
-            val welcomeText = if (isBot) "Привет! Я бот $displayName. Спасибо за интеграцию!" else "Привет! Рад общению в защищенном Primegram."
-            repository.insertLocalMessage(
-                LocalMessage(
-                    chatUserId = id,
-                    senderName = displayName,
-                    text = welcomeText,
-                    isMe = false
-                )
-            )
-            showToast("Собеседник $displayName добавлен по ID: $id!")
+            repository.insertOrUpdateChatUser(user)
+            showToast("Собеседник $displayName успешно добавлен!")
         }
     }
 
-    fun purchaseStars(amount: Int) {
-        viewModelScope.launch {
-            val s = repository.getSettings()
-            val updated = s.copy(
-                userSpentStars = s.userSpentStars + amount,
-                userRating = s.userRating + amount / 10
-            )
-            repository.updateSettings(updated)
-            showToast("Приобретено $amount звёзд в Primegram! 🌟")
+    fun deleteChat(chatId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteChatUser(chatId)
+            repository.clearChatMessages(chatId)
+            if (currentChatId.value == chatId) {
+                currentChatId.value = null
+            }
+            showToast("Чат успешно удален.")
         }
+    }
+
+    fun sendMessage(chatId: String, text: String) {
+        if (text.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val myMsg = MessageEntity(
+                chatId = chatId,
+                senderId = "me",
+                text = text
+            )
+            repository.insertMessage(myMsg)
+
+            // Trigger AI Bot / Simulated responses
+            val user = repository.getChatUserDirect(chatId)
+            if (user != null && user.isBot) {
+                delay(800)
+                handleBotResponse(chatId, text)
+            } else if (chatId == "prime41k") {
+                delay(1200)
+                handleDeveloperAutoReply(chatId, text)
+            }
+        }
+    }
+
+    private suspend fun handleBotResponse(chatId: String, userMessageText: String) {
+        _isBotTyping.value = true
+        var reply = "Я получил ваше сообщение в защищенном канале."
+        try {
+            // Let's attempt to use Gemini if API Key exists
+            val apiKey = System.getenv("GEMINI_API_KEY") ?: ""
+            if (apiKey.isNotEmpty()) {
+                val response = callGeminiApi(apiKey, userMessageText)
+                if (response.isNotEmpty()) {
+                    reply = response
+                }
+            } else {
+                // Return a nice secure response
+                reply = when {
+                    userMessageText.contains("привет", true) ->
+                        "Приветствую! Я готов ответить на ваши вопросы по защите данных и сетевому ядру Primegram. 🛡️"
+                    userMessageText.contains("шифрование", true) || userMessageText.contains("ключи", true) ->
+                        "Каждое сообщение в диалоге подвергается симметричному шифрованию AES-256-GCM. Передача ключей осуществляется через защищенный протокол Диффи-Хеллмана с проверкой подписей!"
+                    userMessageText.contains("анонимность", true) || userMessageText.contains("призрак", true) ->
+                        "Режим Призрака (Ghost-Mode) скрывает статус доставки и статус ввода текста. Прокси MTProto скрывает ваш трафик от провайдеров."
+                    else ->
+                        "Ваш криптографический запрос принят. Все модули Primegram работают в штатном режиме. Задайте вопросы о прокси, шифровании или режиме Призрака! 🛰️"
+                }
+            }
+        } catch (_: Exception) {
+            reply = "Внимание: Соединение зашифровано локально. Модель Gemini временно недоступна, но локальное ядро готово к работе."
+        } finally {
+            _isBotTyping.value = false
+            repository.insertMessage(
+                MessageEntity(
+                    chatId = chatId,
+                    senderId = chatId,
+                    text = reply
+                )
+            )
+        }
+    }
+
+    private suspend fun callGeminiApi(apiKey: String, prompt: String): String {
+        val client = OkHttpClient()
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey"
+        
+        val requestBodyJson = JSONObject().apply {
+            put("contents", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("parts", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("text", prompt + "\nОтвечай кратко на русском языке как защищенный AI помощник Primegram.")
+                        })
+                    })
+                })
+            })
+        }
+
+        val requestBody = requestBodyJson.toString().toRequestBody("application/json".toMediaTypeOrNull())
+        val request = Request.Builder()
+            .url(url)
+            .post(requestBody)
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return ""
+            val bodyString = response.body?.string() ?: return ""
+            return parseGeminiResponse(bodyString)
+        }
+    }
+
+    private fun parseGeminiResponse(jsonString: String): String {
+        return try {
+            val json = JSONObject(jsonString)
+            val candidates = json.getJSONArray("candidates")
+            val firstCandidate = candidates.getJSONObject(0)
+            val content = firstCandidate.getJSONObject("content")
+            val parts = content.getJSONArray("parts")
+            val firstPart = parts.getJSONObject(0)
+            firstPart.getString("text")
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    private suspend fun handleDeveloperAutoReply(chatId: String, text: String) {
+        _isBotTyping.value = true
+        delay(1500)
+        _isBotTyping.value = false
+        val reply = when {
+            text.contains("привет", true) ->
+                "Привет! Рад слышать. Я как раз тестирую обход блокировок и ядро Anti-Recall. Как тебе сборка? 😊"
+            text.contains("баг", true) || text.contains("ошибка", true) ->
+                "Спасибо за репорт! Локальная база логов сохранена, я обязательно пофикшу это в следующем релизике."
+            text.contains("звезд", true) || text.contains("подар", true) ->
+                "О, спасибо за внимание к проекту! Подарки (Gifts) повышают мой рейтинг во фреймворке Primegram. Звезды списываются прямо с твоего баланса!"
+            else ->
+                "В штатном режиме все пакеты проходят супер-быстро! Хочешь активировать 'IP/Location Kernel Spoofer' в настройках? Это меняет IP на лету."
+        }
+        repository.insertMessage(
+            MessageEntity(
+                chatId = chatId,
+                senderId = chatId,
+                text = reply
+            )
+        )
     }
 
     fun updateUserProfile(
+        uniqueId: String,
         displayName: String,
         username: String,
-        bio: String,
-        avatarStart: Int,
-        avatarEnd: Int,
-        neonGlow: String,
-        uniqueId: String? = null
+        bio: String
     ) {
-        viewModelScope.launch {
-            val s = repository.getSettings()
-            val updated = s.copy(
-                userDisplayName = displayName,
-                userUsername = username,
-                userBio = bio,
-                userAvatarGradientStart = avatarStart,
-                userAvatarGradientEnd = avatarEnd,
-                userNeonGlowColor = neonGlow,
-                userUniqueId = uniqueId ?: s.userUniqueId
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            val updated = current.copy(
+                userUniqueId = uniqueId,
+                displayName = displayName,
+                username = username,
+                bio = bio
             )
             repository.updateSettings(updated)
             showToast("Профиль успешно обновлен! ✨")
         }
     }
 
-    fun sendGift(chatUserId: String, giftName: String, starCost: Int) {
-        viewModelScope.launch {
-            val s = repository.getSettings()
-            if (s.userSpentStars < starCost) {
-                // Auto buy gaps
-                val gap = starCost - s.userSpentStars
-                val roundedGap = ((gap / 1000) + 1) * 1000
-                val updatedSpent = s.userSpentStars + roundedGap
-                repository.updateSettings(s.copy(userSpentStars = updatedSpent))
-                showToast("Автоматически приобретено +$roundedGap звёзд для подарка! 🌟")
-            }
-            
-            // Re-fetch and pay
-            val freshSettings = repository.getSettings()
-            val newMeSpent = freshSettings.userSpentStars + starCost
-            repository.updateSettings(freshSettings.copy(userSpentStars = newMeSpent))
-            
-            // Add message
-            repository.insertLocalMessage(
-                LocalMessage(
-                    chatUserId = chatUserId,
-                    senderName = "Me",
-                    text = "🎁 Отправил подарок: '$giftName' стоимостью $starCost звёзд! 🌟",
-                    isMe = true
-                )
+    fun setProxyEnabled(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            repository.updateSettings(current.copy(proxyEnabled = enabled))
+            showToast(if (enabled) "🔗 Прокси-сервер подключен!" else "Прокси отключен.")
+        }
+    }
+
+    fun setGhostModeEnabled(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            repository.updateSettings(current.copy(ghostModeEnabled = enabled))
+            showToast(if (enabled) "👻 Режим Призрака активирован! Вы полностью невидимы." else "Режим Призрака деактивирован.")
+        }
+    }
+
+    fun setAntiRecallEnabled(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            repository.updateSettings(current.copy(antiRecallEnabled = enabled))
+            showToast(if (enabled) "🔌 Перехват удаленных сообщений включен" else "Перехват удаленных сообщений выключен")
+        }
+    }
+
+    fun setMediaSaverEnabled(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            repository.updateSettings(current.copy(mediaSaverEnabled = enabled))
+            showToast(if (enabled) "🔌 Перехват одноразовых фото включен" else "Перехват одноразовых фото выключен")
+        }
+    }
+
+    fun changeTheme(themeName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            repository.updateSettings(current.copy(selectedTheme = themeName))
+            showToast("🎨 Тема изменена на: $themeName")
+        }
+    }
+
+    fun changeTranslationLanguage(lang: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            repository.updateSettings(current.copy(targetTranslationLang = lang))
+            showToast("🌐 Язык перевода: $lang")
+        }
+    }
+
+    fun changeLocationSpoof(spoof: String, ip: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            val updated = current.copy(locationSpoof = spoof, spoofedIpAddress = ip)
+            repository.updateSettings(updated)
+            showToast(if (spoof == "Off") "Подмена IP отключена" else "📍 IP изменен на: $ip ($spoof)")
+        }
+    }
+
+    fun setEncryptionLevel(level: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            repository.updateSettings(current.copy(activeEncryptionLevel = level))
+            showToast("🔒 Алгоритм шифрования обновлен: $level. Сгенерированы новые сессионные ключи.")
+        }
+    }
+
+    fun addProxy(title: String, host: String, port: Int, secret: String?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.insertProxyProfile(
+                ProxyProfileEntity(title = title, host = host, port = port, secret = secret)
             )
-            
-            val targetUser = chatUsers.value.find { it.id == chatUserId }
-            if (targetUser != null) {
-                val updatedTarget = targetUser.copy(spentStars = targetUser.spentStars + starCost)
-                repository.insertChatUser(updatedTarget)
-                
-                showToast("Подарок '$giftName' успешно отправлен! 🏆")
-                
-                delay(1200)
-                setTypingState(chatUserId, "${targetUser.displayName} отвечает...")
-                delay(1000)
-                clearTypingState(chatUserId)
-                
-                val thanksMessage = "🎁 Спасибо огромное за потрясающий подарок '$giftName'! Мой звёздный рейтинг теперь вырос! ✨"
-                repository.insertLocalMessage(
-                    LocalMessage(
-                        chatUserId = chatUserId,
-                        senderName = targetUser.displayName,
-                        text = thanksMessage,
-                        isMe = false
-                    )
-                )
-            }
+            showToast("✅ Прокси успешно добавлен!")
         }
     }
 
-    fun removeChatUser(id: String) {
-        viewModelScope.launch {
-            repository.deleteChatUser(id)
-            repository.clearChatHistory(id)
-            showToast("Чат удален.")
-            if (_activeChatId.value == id) {
-                _activeChatId.value = "1"
-            }
+    fun deleteProxy(proxyId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteProxy(proxyId)
+            showToast("❌ Прокси удален.")
         }
     }
 
-    // Dynamic Live Mini App Registration
-    fun addMiniApp(id: String, name: String, description: String, url: String, iconName: String) {
-        viewModelScope.launch {
-            val app = MiniAppEntity(id, name, description, url, iconName, addedByUser = true)
-            repository.insertMiniApp(app)
+    fun addMiniApp(name: String, desc: String, url: String, emoji: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val id = name.toLowerCase().filter { it.isLetter() || it == '_' }
+            repository.insertMiniApp(MiniAppEntity(id = id, name = name, description = desc, url = url, iconEmoji = emoji))
             showToast("Мини-апп $name успешно добавлен в панель инструментов!")
         }
     }
 
-    fun removeMiniApp(id: String) {
-        viewModelScope.launch {
+    fun deleteMiniApp(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
             repository.deleteMiniApp(id)
             showToast("Мини-апп удален.")
         }
     }
 
-    // SIMULATED MOD FEATURES INTERCEPTIONS
-    suspend fun simulateDeletedMessageTrigger() {
-        val currentChatId = _activeChatId.value
-        val partner = getChatPartnerName(currentChatId)
-        val indexColor = getChatPartnerColor(currentChatId)
-
-        val phrase = listOf(
-            "Слушай, а где исходники Черриграма лежали?",
-            "Алекс, удали мою фотку с сервера плиз!",
-            "Ой, случайно отправил тебе пароль от кошелька: secret_seed_phrase_2026",
-            "Завтра в 14:00 встреча. Не говори никому, стираю сообщение."
-        ).random()
-
-        // Step 1: Insert normal message
-        val msgId = (10000..99999).random()
-        val incomingMsg = LocalMessage(
-            id = msgId,
-            chatUserId = currentChatId,
-            senderName = partner,
-            text = phrase,
-            isMe = false
-        )
-        repository.insertLocalMessage(incomingMsg)
-
-        showToast("$partner печатает...")
-        delay(3500)
-
-        // Step 2: Intercept deleted message in Room DB
-        val isAntiRecallActive = isPluginInstalled("plugin_anti_recall")
-        if (isAntiRecallActive) {
-            val deletedModel = incomingMsg.copy(isDeleted = true, text = phrase)
-            repository.insertLocalMessage(deletedModel)
-
-            // Save to actual deleted logs
-            val dbMsg = DeletedMessage(
-                senderName = partner,
-                senderAvatarColor = indexColor,
-                messageText = phrase,
-                timestamp = System.currentTimeMillis() - 3500,
-                deletedTimestamp = System.currentTimeMillis(),
-                originalChatId = if (currentChatId.all { it.isDigit() }) currentChatId.toIntOrNull() ?: 1 else 1
-            )
-            repository.insertDeletedMessage(dbMsg)
-            repository.addAnalyticsLog("security", "Логи удел. сообщений", 1.0f)
-            
-            showToast("📥 Anti-Recall Pro: $partner удалил сообщение, но оно перехвачено и сохранено!")
-        } else {
-            val deletedModel = incomingMsg.copy(isDeleted = true, text = "🚫 Сообщение удалено собеседником")
-            repository.insertLocalMessage(deletedModel)
-            showToast("⚠️ Собеседник $partner удалил сообщение. Включите плагин 'Anti-Recall Pro' для перехвата!")
-        }
-    }
-
-    suspend fun simulateOneTimeMediaTrigger() {
-        val currentChatId = _activeChatId.value
-        val partner = getChatPartnerName(currentChatId)
-        
-        val isVideo = listOf(true, false).random()
-        val fileTypeName = if (isVideo) "одноразовое видео" else "одноразовое фото"
-        val fileExtension = if (isVideo) "mp4" else "jpg"
-        val mockTitle = if (isVideo) "Секретное видео_${System.currentTimeMillis() % 1000}.$fileExtension" else "Фото-призрак_${System.currentTimeMillis() % 1000}.$fileExtension"
-        
-        val isMediaSaverActive = isPluginInstalled("plugin_self_destruct_saver")
-        val mediaText = if (isMediaSaverActive) "🖼 [$fileTypeName, нажмите для просмотра]" else "🖼 [Одноразовое медиа, истекает через 10 сек]"
-
-        val msgId = (10000..99999).random()
-        val mediaMsg = LocalMessage(
-            id = msgId,
-            chatUserId = currentChatId,
-            senderName = partner,
-            text = mediaText,
-            isMe = false,
-            isOneTimeMedia = true,
-            mediaPlaceholder = mockTitle,
-            isVideoType = isVideo
-        )
-        repository.insertLocalMessage(mediaMsg)
-
-        if (isMediaSaverActive) {
-            delay(2000)
-            // Primegram intercepts and downloads it to DB!
-            val mediaObj = SelfDestructMedia(
-                senderName = partner,
-                fileType = if (isVideo) "video" else "image",
-                durationSeconds = if (isVideo) (5..20).random() else 0,
-                fileSizeKb = (300..5000).random(),
-                timestamp = System.currentTimeMillis(),
-                visualPlaceholderRes = if (isVideo) "video_preview" else "photo_preview",
-                title = mockTitle
-            )
-            repository.insertSelfDestructMedia(mediaObj)
-            repository.addAnalyticsLog("security", "Сохранено 1-time файлов", 1.0f)
-
-            showToast("📥 Media Saver: Копия одноразового файла от $partner перехвачена и сохранена!")
-        } else {
-            // Auto destruction logic right before their eyes!
-            delay(10000)
-            val expiredMsg = mediaMsg.copy(
-                text = "🔒 Ссылка уничтожена (Включите Media Saver Block)",
-                isOneTimeMedia = false,
-                mediaPlaceholder = "Файл стерт безвозвратно"
-            )
-            repository.insertLocalMessage(expiredMsg)
-            showToast("⚠️ Одноразовый файл от $partner удален сервером. Включите плагин 'Media Saver Block'!")
-        }
-    }
-
-    // UPDATE AND CONTROL ACTIONS
-    fun toggleGhostMode(enabled: Boolean) {
-        viewModelScope.launch {
-            val current = getSettingsDirect()
-            val updated = current.copy(
-                ghostModeEnabled = enabled,
-                hideOnlineStatusUniversal = enabled,
-                hideTypingStatus = enabled,
-                anonymousStoriesViewer = enabled
-            )
-            repository.updateSettings(updated)
-            repository.addAnalyticsLog("security", "Режим призрака", if (enabled) 1.0f else 0.0f)
-            showToast(if (enabled) "👻 Режим Призрака активирован! Вы полностью невидимы." else "Режим Призрака деактивирован.")
-        }
-    }
-
-    fun toggleSetting(key: String, enabled: Boolean) {
-        viewModelScope.launch {
-            val current = getSettingsDirect()
-            val updated = when (key) {
-                "translatorEnabled" -> current.copy(translatorEnabled = enabled)
-                "cloudSyncEnabled" -> current.copy(cloudSyncEnabled = enabled)
-                "passcodeLockEnabled" -> current.copy(passcodeLockEnabled = enabled)
-                "saveDeletedMessages" -> current.copy(saveDeletedMessages = enabled)
-                "saveSelfDestructingMedia" -> current.copy(saveSelfDestructingMedia = enabled)
-                "proxyEnabled" -> current.copy(proxyEnabled = enabled).also {
-                    showToast(if (enabled) "🔗 Прокси-сервер подключен!" else "Прокси отключен.")
-                }
-                "hideOnlineStatusUniversal" -> current.copy(hideOnlineStatusUniversal = enabled)
-                "anonymousStoriesViewer" -> current.copy(anonymousStoriesViewer = enabled)
-                "hideTypingStatus" -> current.copy(hideTypingStatus = enabled)
-                "hideReadStatus" -> current.copy(hideReadStatus = enabled)
-                "hardwareAccelerationEnabled" -> current.copy(hardwareAccelerationEnabled = enabled)
-                else -> current
-            }
-            repository.updateSettings(updated)
-        }
-    }
-
-    fun updateTheme(themeName: String) {
-        viewModelScope.launch {
-            val current = getSettingsDirect()
-            val updated = current.copy(themeName = themeName)
-            repository.updateSettings(updated)
-            showToast("🎨 Тема изменена на: $themeName")
-        }
-    }
-
-    fun updateTranslationTargetLanguage(lang: String) {
-        viewModelScope.launch {
-            val current = getSettingsDirect()
-            val updated = current.copy(translationTargetLanguage = lang)
-            repository.updateSettings(updated)
-            showToast("🌐 Язык перевода: $lang")
-        }
-    }
-
-    fun updateSpoofedLocation(loc: String) {
-        viewModelScope.launch {
-            val current = getSettingsDirect()
-            val ipMap = mapOf(
-                "Zurich, Switzerland" to "194.209.14.88",
-                "Tokyo, Japan" to "210.140.10.35",
-                "New York, USA" to "64.233.161.99",
-                "Moscow, Russia" to "87.250.250.242",
-                "London, UK" to "185.12.14.24",
-                "Off" to "Real User IP"
-            )
-            val updated = current.copy(
-                spoofedIpLocation = loc,
-                spoofedIpAddress = ipMap[loc] ?: "Real User IP"
-            )
-            repository.updateSettings(updated)
-            showToast(if (loc == "Off") "Подмена IP отключена" else "📍 IP изменен на: ${updated.spoofedIpAddress} ($loc)")
-        }
-    }
-
-    fun updateEncryptionLevel(level: String) {
-        viewModelScope.launch {
-            val current = getSettingsDirect()
-            val updated = current.copy(encryptionLevel = level)
-            repository.updateSettings(updated)
-            repository.addAnalyticsLog("security", "Ротация ключей $level", 256f)
-            showToast("🔒 Алгоритм шифрования обновлен: $level. Сгенерированы новые сессионные ключи.")
-        }
-    }
-
-    fun addProxyServer(title: String, host: String, port: Int, type: String, secret: String?) {
-        viewModelScope.launch {
-            repository.addCustomProxy(title, host, port, type, secret)
-            showToast("✅ Прокси $title успешно добавлен!")
-        }
-    }
-
-    fun deleteProxy(id: Int) {
-        viewModelScope.launch {
-            repository.deleteProxy(id)
-            showToast("❌ Прокси удален.")
-        }
-    }
-
-    fun togglePluginInstall(pluginId: String, currentInstalled: Boolean) {
-        viewModelScope.launch {
-            if (currentInstalled) {
-                repository.installPlugin(pluginId, false)
-                showToast("🔌 Плагин отключен")
-            } else {
-                _pluginDownloadStatus.value = _pluginDownloadStatus.value.toMutableMap().apply { put(pluginId, 0.05f) }
-                for (progress in 1..10) {
-                    delay(150)
-                    _pluginDownloadStatus.value = _pluginDownloadStatus.value.toMutableMap().apply { 
-                        put(pluginId, progress * 0.1f) 
+    fun setPluginEnabled(id: String, enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.setPluginEnabled(id, enabled)
+            // Synchronize with direct states
+            when(id) {
+                "anti_recall" -> setAntiRecallEnabled(enabled)
+                "media_saver" -> setMediaSaverEnabled(enabled)
+                "ghost_mode" -> setGhostModeEnabled(enabled)
+                "ip_spoofer" -> {
+                    if (enabled) {
+                        changeLocationSpoof("Stockholm, Sweden", "46.12.98.24")
+                    } else {
+                        changeLocationSpoof("Off", "192.168.1.1")
                     }
                 }
-                delay(100)
-                _pluginDownloadStatus.value = _pluginDownloadStatus.value.toMutableMap().apply { remove(pluginId) }
-                repository.installPlugin(pluginId, true)
-                showToast("🔌 Плагин загружен и запущен во фреймворке!")
             }
         }
     }
 
-    fun triggerCloudSync() {
-        viewModelScope.launch {
-            if (_isSyncing.value) return@launch
-            _isSyncing.value = true
-            repository.addAnalyticsLog("security", "Облачный бэкап настроек", 1.0f)
-            delay(1500)
-            val current = getSettingsDirect()
-            val updated = current.copy(lastCloudSyncTime = System.currentTimeMillis())
-            repository.updateSettings(updated)
-            _isSyncing.value = false
-            showToast("☁️ Настройки синхронизированы с облаком Primegram Secure Cloud!")
+    fun sendGift(partnerId: String, giftName: String, cost: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentSettings = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            val user = repository.getChatUserDirect(partnerId) ?: return@launch
+
+            if (currentSettings.starsBalance < cost) {
+                val roundedGap = cost - currentSettings.starsBalance
+                val refilledSettings = currentSettings.copy(
+                    starsBalance = 15000 // Refill balance automatically on purchase
+                )
+                repository.updateSettings(refilledSettings)
+                showToast("Автоматически приобретено +$roundedGap звёзд для подарка! 🌟")
+                delay(300)
+            }
+
+            // Deduct from Balance, Add to Partner
+            val updatedSettings = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            repository.updateSettings(updatedSettings.copy(starsBalance = updatedSettings.starsBalance - cost))
+            repository.insertOrUpdateChatUser(user.copy(spentStars = user.spentStars + cost))
+
+            // Insert system message for gift transaction
+            repository.insertMessage(
+                MessageEntity(
+                    chatId = partnerId,
+                    senderId = "me",
+                    text = "🎁 Отправил подарок: $giftName ($cost 🌟)",
+                    isOneTimeMedia = false
+                )
+            )
+
+            showToast("Подарок '$giftName' успешно отправлен! 🏆")
+
+            delay(1200)
+            val replyText = "Ого! Спасибо за $giftName! Мой звездный статус вырос на +$cost звёзд! 💖🛡️"
+            repository.insertMessage(
+                MessageEntity(
+                    chatId = partnerId,
+                    senderId = partnerId,
+                    text = replyText
+                )
+            )
         }
     }
 
-    fun triggerCacheClean() {
-        viewModelScope.launch {
-            if (_isCleaningCache.value) return@launch
-            _isCleaningCache.value = true
-            delay(1200)
-            repository.clearCache()
-            _isCleaningCache.value = false
+    fun purchaseStars(amount: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            repository.updateSettings(current.copy(starsBalance = current.starsBalance + amount))
+            showToast("Приобретено $amount звёзд в Primegram! 🌟")
+        }
+    }
+
+    fun clearCache() {
+        viewModelScope.launch(Dispatchers.IO) {
             showToast("🧹 Кэш очищен! Освобождено 345.5 MB")
         }
     }
 
-    fun clearDeletedMessagesHistory() {
-        viewModelScope.launch {
-            repository.clearDeletedMessages()
-            showToast("🧹 История удаленных сообщений очищена.")
-        }
-    }
-
-    fun clearMediaVault() {
-        viewModelScope.launch {
-            repository.clearSelfDestructMedia()
-            showToast("🧹 Сейф одноразовых медиа очищен.")
-        }
-    }
-
-    private suspend fun getSettingsDirect(): PrimeSettings {
-        return repository.getSettings()
-    }
-
-    private suspend fun simulateGroupMessage(groupId: String) {
-        val randMemberAndPhrase = when (groupId) {
-            "ton_hackers" -> {
-                val member = listOf("TON_Miner_99", "Durov_Fans", "Hacker_TON").random()
-                val phrase = listOf(
-                    "Кто пробовал выкачать TON SDK во встроенный мини-апп? Ссылки работают?",
-                    "Демка игры Gamee в Mini App просто пушка, без лагов и без костылей.",
-                    "В новом билде Cherrygram плагин Premium Star Decorator работает отлично!",
-                    "Разрабы Черриграма перевели сетевой сокет на рутины, пинг теперь 35мс.",
-                    "Сейф перехвата Anti-Recall вчера спас удаленный пост админа, лол!"
-                ).random()
-                Pair(member, phrase)
-            }
-            "stealth_leaks" -> {
-                val member = listOf("Admin_Stealth", "LeakBot", "BypassGroup").random()
-                val phrase = listOf(
-                    "📡 СКАНИРОВАНИЕ... Системы обхода ТСПУ зафиксировали ротацию портов. Подключаем резервы.",
-                    "Внимание: плагин 'Anti-Recall Pro' перехватывает медиафайлы даже после клика.",
-                    "Встроенный 'Silent Typing Injector' теперь маскирует статус набора текста под запись аудио.",
-                    "Все настройки и бэкапы зашифрованы локально по стандарту AES-256."
-                ).random()
-                Pair(member, phrase)
-            }
-            else -> null
-        }
-
-        if (randMemberAndPhrase != null) {
-            setTypingState(groupId, "${randMemberAndPhrase.first} печатает...")
-            delay(2000)
-            clearTypingState(groupId)
-
-            val msg = LocalMessage(
-                chatUserId = groupId,
-                senderName = randMemberAndPhrase.first,
-                text = randMemberAndPhrase.second,
-                isMe = false
-            )
-            repository.insertLocalMessage(msg)
-            repository.addAnalyticsLog("network", "Групповой месседж от ${randMemberAndPhrase.first}", 1.0f)
-        }
-    }
-
-    fun addCustomPlugin(id: String, name: String, description: String, author: String, version: String, sizeMb: Double, scriptLang: String = "javascript", scriptCode: String = "") {
-        viewModelScope.launch {
-            val updatedPlugin = com.example.data.PluginEntity(
-                id = id,
-                name = name,
-                description = description,
-                author = author,
-                version = version,
-                isInstalled = true,
-                sizeMb = sizeMb,
-                scriptLanguage = scriptLang,
-                scriptCode = scriptCode
-            )
-            repository.insertPlugin(updatedPlugin)
-            repository.addAnalyticsLog("app_usage", "Добавлен плагин: $name", sizeMb.toFloat())
-            showToast("🔌 Плагин '$name' успешно внедрен в ядро!")
-        }
-    }
-
-    fun setTypingState(chatId: String, text: String) {
-        _typingState.value = _typingState.value.toMutableMap().apply {
-            put(chatId, text)
-        }
-    }
-
-    fun clearTypingState(chatId: String) {
-        _typingState.value = _typingState.value.toMutableMap().apply {
-            remove(chatId)
+    fun clearLocalStoredIntercepted() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.clearAllMessages()
+            showToast("🧹 Вся зашифрованная история сообщений очищена.")
         }
     }
 
     fun getChatPartnerName(chatId: String): String {
-        val user = chatUsers.value.find { it.id == chatId }
-        if (user != null) return user.displayName
-        return when (chatId) {
-            "1" -> "Арслан Cherrygram"
-            "2" -> "Разработчик Primegram"
-            "3" -> "Мама"
-            else -> "Пользователь $chatId"
+        return when(chatId) {
+            "prime41k" -> "Святослав Prime"
+            "prime_gpt_bot" -> "Prime Secure AI"
+            else -> chatId
         }
     }
 
-    fun getChatPartnerColor(chatId: String): Int {
-        val user = chatUsers.value.find { it.id == chatId }
-        if (user != null) return user.avatarColor
-        return when (chatId) {
-            "1" -> 0xFFEF5350.toInt()
-            "2" -> 0xFF26A69A.toInt()
-            "3" -> 0xFFFFCA28.toInt()
-            else -> 0xFF42A5F5.toInt()
+    fun sendOneTimeMedia(chatId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val msg = MessageEntity(
+                chatId = chatId,
+                senderId = "me",
+                text = "📷 Одноразовый секретный снимок камеры",
+                isOneTimeMedia = true
+            )
+            repository.insertMessage(msg)
+
+            // Auto simulated bot response after sending media
+            delay(1200)
+            val responseText = "О, вижу отправленный снимок! Система Media Saver Block заблокирует его исчезновение."
+            repository.insertMessage(
+                MessageEntity(
+                    chatId = chatId,
+                    senderId = chatId,
+                    text = responseText
+                )
+            )
+        }
+    }
+
+    fun simulateDeletedMessageTrigger() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val chatId = currentChatId.value ?: return@launch
+            val partner = getChatPartnerName(chatId)
+            
+            // Insert partner temporary message
+            val tempMsgId = System.currentTimeMillis()
+            val tempMsg = MessageEntity(
+                id = tempMsgId,
+                chatId = chatId,
+                senderId = chatId,
+                text = "🔐 Секретный IP: 85.112.42.19 (сообщение удалится через 3 сек)"
+            )
+            repository.insertMessage(tempMsg)
+            
+            delay(3000)
+
+            val settingsVal = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            if (settingsVal.antiRecallEnabled) {
+                // Keep it and mark as intercepted-deleted
+                repository.markMessageInterceptedDeleted(tempMsgId, "📥 [Anti-Recall Перехвачено] Секретный IP: 85.112.42.19")
+                showToast("📥 Anti-Recall Pro: Собеседник попытался удалить сообщение, но оно сохранено в журнал!")
+            } else {
+                // Delete it as requested
+                repository.markMessageDeletedLocally(tempMsgId)
+                showToast("🗑️ Собеседник удалил сообщение. Включите Anti-Recall Pro для удержания.")
+            }
         }
     }
 }
