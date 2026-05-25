@@ -151,13 +151,26 @@ fun PrimegramDashboard(
     val settingsState by viewModel.settings.collectAsState()
     val activeSettings = settingsState ?: PrimeSettings()
     val context = LocalContext.current
+
+    val toastMessage by viewModel.toastMessage.collectAsState()
+    LaunchedEffect(toastMessage) {
+        toastMessage?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
+            viewModel.clearToast()
+        }
+    }
     
     var currentScreen by remember { mutableStateOf("chats") }
     var showFirstTimeIdSetupDialog by remember { mutableStateOf(false) }
     
-    LaunchedEffect(activeSettings.userUniqueId) {
-        if (activeSettings.userUniqueId.isEmpty()) {
-            showFirstTimeIdSetupDialog = true
+    LaunchedEffect(settingsState) {
+        val sState = settingsState
+        if (sState != null) {
+            if (sState.userUniqueId.isEmpty()) {
+                showFirstTimeIdSetupDialog = true
+            } else {
+                showFirstTimeIdSetupDialog = false
+            }
         }
     }
 
