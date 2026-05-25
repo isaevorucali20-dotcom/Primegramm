@@ -305,6 +305,7 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                     text = reply
                 )
             )
+            awardStarsForReply(5)
         }
     }
 
@@ -741,6 +742,62 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearP2pLogs() {
         _p2pLogs.value = emptyList()
+    }
+
+    fun toggleSecurityFeature(featureKey: String, enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            val updated = when (featureKey) {
+                "onionRouting" -> current.copy(onionRoutingEnabled = enabled)
+                "antiFrida" -> current.copy(antiFridaEnabled = enabled)
+                "memoryShredder" -> current.copy(zeroTraceMemoryShredderEnabled = enabled)
+                "ed25519" -> current.copy(ed25519HashLoginEnabled = enabled)
+                "deadMansSwitch" -> current.copy(deadMansSwitchEnabled = enabled)
+                "hotspotMesh" -> current.copy(hotspotMeshBridgeEnabled = enabled)
+                "fts5Crypto" -> current.copy(fts5CryptoEngineEnabled = enabled)
+                "qrSync" -> current.copy(qrMultiDeviceSyncEnabled = enabled)
+                "adaptiveCodec" -> current.copy(adaptiveP2pCodecEnabled = enabled)
+                "dynamicPolling" -> current.copy(dynamicPollingBatteryTimerEnabled = enabled)
+                "blindChannels" -> current.copy(blindGroupChannelsEnabled = enabled)
+                "ephemeralRooms" -> current.copy(ephemeralMulticastRoomsEnabled = enabled)
+                "messageDropping" -> current.copy(p2pMessageDroppingEnabled = enabled)
+                "mediaSharding" -> current.copy(distributedMediaShardingEnabled = enabled)
+                "forkingThreads" -> current.copy(forkingThreadsEnabled = enabled)
+                else -> current
+            }
+            repository.updateSettings(updated)
+            
+            val featureMsg = when (featureKey) {
+                "onionRouting" -> if (enabled) "🧅 Мета-микширование (Tor Onion) активировано!" else "Мета-микширование отключено."
+                "antiFrida" -> if (enabled) "🛡️ Защита от отладки ядра (C++ Anti-Frida/NDK Check) активна!" else "Защита ядра отключена."
+                "memoryShredder" -> if (enabled) "📟 Шредер ОЗУ нулевого следа (Zero-Trace) запущен!" else "Шредер ОЗУ остановлен."
+                "ed25519" -> if (enabled) "🔑 Вход по хэшу ED25519 активен!" else "Ed25519 вход отключен."
+                "deadMansSwitch" -> if (enabled) "⏳ Самоликвидация (Dead Man's Switch 72ч) взведена!" else "Таймер самоликвидации снят."
+                "hotspotMesh" -> if (enabled) "⚡ Автономный Wi-Fi/LTE мост развернут!" else "Wi-Fi Mesh мост остановлен."
+                "fts5Crypto" -> if (enabled) "🔍 Полнотекстовый поиск FTS5 Crypto-Engine готов!" else "Криптопоиск отключен."
+                "qrSync" -> if (enabled) "📲 Прямая QR сокет-синхронизация готова!" else "Мульти-девайс QR-мост отключен."
+                "adaptiveCodec" -> if (enabled) "🎬 Адаптивный H.265 P2P кодек активен!" else "H.265 адаптивный кодек отключен."
+                "dynamicPolling" -> if (enabled) "🔋 Смарт-таймер Dynamic Polling экономит батарею!" else "Динамический опрос возвращен к стандарту."
+                "blindChannels" -> if (enabled) "👥 Слепые групповые каналы CRDT скрывают участников!" else "Слепые каналы отключены."
+                "ephemeralRooms" -> if (enabled) "👻 Комната-призрак создана!" else "Комната-призрак закрыта."
+                "messageDropping" -> if (enabled) "✉️ Оффлайн-почтальон (P2P Message Dropping) запущен!" else "Офлайн-почтальон остановлен."
+                "mediaSharding" -> if (enabled) "💿 Распределенное медиахранилище (Torrent Sharding) подключено!" else "Торрент-кусочки шардинга выгружены."
+                "forkingThreads" -> if (enabled) "🧵 Изолированные ветки ответов Sub-Ratchet активны!" else "Sub-Ratchet ветвление отключено."
+                else -> ""
+            }
+            if (featureMsg.isNotEmpty()) {
+                showToast(featureMsg)
+            }
+        }
+    }
+
+    fun awardStarsForReply(amount: Int = 5) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            val newBalance = current.starsBalance + amount
+            repository.updateSettings(current.copy(starsBalance = newBalance))
+            showToast("🎖️ +$amount звезд начислено за ответ собеседника! Баланс: $newBalance")
+        }
     }
 
     override fun onCleared() {

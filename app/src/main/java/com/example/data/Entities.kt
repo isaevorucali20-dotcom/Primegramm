@@ -19,11 +19,32 @@ data class PrimeSettingsEntity(
     val spoofedIpAddress: String = "192.168.1.1",
     val locationSpoof: String = "Off",
     val activeEncryptionLevel: String = "AES-256-GCM",
-    val starsBalance: Int = 12500,
+    val starsBalance: Int = 0,
     val torTunnelEnabled: Boolean = false,
     val torOnionAddress: String = "",
     val p2pDhtEnabled: Boolean = false,
-    val p2pPeerId: String = ""
+    val p2pPeerId: String = "",
+    
+    // 🔒 АНОНИМНОСТЬ И БЕЗОПАСНОСТЬ (🔒 ANONYMITY & SECURITY)
+    val onionRoutingEnabled: Boolean = false,
+    val antiFridaEnabled: Boolean = false,
+    val zeroTraceMemoryShredderEnabled: Boolean = false,
+    val ed25519HashLoginEnabled: Boolean = false,
+    val deadMansSwitchEnabled: Boolean = false,
+    
+    // 🛠 УДОБСТВО И ЮЗАБИЛИТИ (🛠 USABILITY & CONVENIENCE)
+    val hotspotMeshBridgeEnabled: Boolean = false,
+    val fts5CryptoEngineEnabled: Boolean = false,
+    val qrMultiDeviceSyncEnabled: Boolean = false,
+    val adaptiveP2pCodecEnabled: Boolean = false,
+    val dynamicPollingBatteryTimerEnabled: Boolean = false,
+    
+    // 💬 ФУНКЦИИ ДЛЯ ЧАТОВ (💬 CHAT FEATURES)
+    val blindGroupChannelsEnabled: Boolean = false,
+    val ephemeralMulticastRoomsEnabled: Boolean = false,
+    val p2pMessageDroppingEnabled: Boolean = false,
+    val distributedMediaShardingEnabled: Boolean = false,
+    val forkingThreadsEnabled: Boolean = false
 )
 
 @Entity(tableName = "chat_users_table")
