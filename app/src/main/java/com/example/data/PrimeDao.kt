@@ -81,4 +81,7 @@ interface PrimeDao {
 
     @Query("UPDATE plugins_table SET isEnabled = :enabled WHERE id = :pluginId")
     suspend fun setPluginEnabled(pluginId: String, enabled: Boolean)
+
+    @Query("DELETE FROM plugins_table WHERE id = :pluginId")
+    suspend fun deletePlugin(pluginId: String)
 }

@@ -1,13 +1,17 @@
 package com.example.ui
 
 import android.app.Application
+import android.webkit.WebView
+import android.webkit.JavascriptInterface
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
+import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -18,6 +22,7 @@ import org.json.JSONObject
 class PrimeViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AppDatabase.getDatabase(application)
     private val repository = PrimeRepository(database.dao())
+    private var webView: WebView? = null
 
     val settings: StateFlow<PrimeSettingsEntity?> = repository.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -55,6 +60,7 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             setupInitialDatabaseData()
         }
         startPgpServer()
+        initJsEngine()
     }
 
     private suspend fun setupInitialDatabaseData() {
@@ -165,7 +171,18 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                     version = "v3.1",
                     isEnabled = true,
                     type = "System Core",
-                    description = "Перехватывает и сохраняет сообщения, которые собеседник пытается удалить из диалога."
+                    description = "Перехватывает и сохраняет сообщения, которые собеседник пытается удалить из диалога.",
+                    scriptCode = """
+                        function onSendMessage(msg) {
+                            return msg;
+                        }
+                        function onReceiveMessage(msg) {
+                            return msg;
+                        }
+                        function onEnabled(isEnabled) {
+                            Primegram.showToast("Anti-Recall Pro: " + (isEnabled ? "Активен" : "Отключен"));
+                        }
+                    """.trimIndent()
                 )
             )
             repository.insertPlugin(
@@ -175,7 +192,18 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                     version = "v2.0",
                     isEnabled = true,
                     type = "System Core",
-                    description = "Блокирует таймеры уничтожения одноразовых медиафайлов и сохраняет их копию."
+                    description = "Блокирует таймеры уничтожения одноразовых медиафайлов и сохраняет их копию.",
+                    scriptCode = """
+                        function onSendMessage(msg) {
+                            return msg;
+                        }
+                        function onReceiveMessage(msg) {
+                            return msg;
+                        }
+                        function onEnabled(isEnabled) {
+                            Primegram.showToast("Media Saver Block: " + (isEnabled ? "Контролирует буфер" : "Режим ожидания"));
+                        }
+                    """.trimIndent()
                 )
             )
             repository.insertPlugin(
@@ -185,7 +213,18 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                     version = "v1.4b",
                     isEnabled = false,
                     type = "Inject Mod",
-                    description = "Подменяет ваш реальный IP и географические координаты на уровне сокетов соединения."
+                    description = "Подменяет ваш реальный IP и географические координаты на уровне сокетов соединения.",
+                    scriptCode = """
+                        function onSendMessage(msg) {
+                            return msg;
+                        }
+                        function onReceiveMessage(msg) {
+                            return msg;
+                        }
+                        function onEnabled(isEnabled) {
+                            Primegram.showToast("Kernel Spoofer: " + (isEnabled ? "Туннель зашифрован" : "Стандартные сокеты"));
+                        }
+                    """.trimIndent()
                 )
             )
             repository.insertPlugin(
@@ -195,7 +234,18 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                     version = "v5.2",
                     isEnabled = false,
                     type = "Inject Mod",
-                    description = "Полностью скрывает статус релиза ('в сети', 'печатает') и не помечает сообщения прочитанными."
+                    description = "Полностью скрывает статус релиза ('в сети', 'печатает') и не помечает сообщения прочитанными.",
+                    scriptCode = """
+                        function onSendMessage(msg) {
+                            return msg;
+                        }
+                        function onReceiveMessage(msg) {
+                            return msg;
+                        }
+                        function onEnabled(isEnabled) {
+                            Primegram.showToast("Ghost Mode System: " + (isEnabled ? "В режиме невидимки" : "В сети"));
+                        }
+                    """.trimIndent()
                 )
             )
         }
@@ -251,21 +301,25 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage(chatId: String, text: String) {
         if (text.isBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
-            val myMsg = MessageEntity(
-                chatId = chatId,
-                senderId = "me",
-                text = text
-            )
-            repository.insertMessage(myMsg)
+            runJsHookSend(text) { processedText ->
+                viewModelScope.launch(Dispatchers.IO) {
+                    val myMsg = MessageEntity(
+                        chatId = chatId,
+                        senderId = "me",
+                        text = processedText
+                    )
+                    repository.insertMessage(myMsg)
 
-            // Trigger AI Bot / Simulated responses
-            val user = repository.getChatUserDirect(chatId)
-            if (user != null && user.isBot) {
-                delay(800)
-                handleBotResponse(chatId, text)
-            } else if (chatId == "prime41k") {
-                delay(1200)
-                handleDeveloperAutoReply(chatId, text)
+                    // Trigger AI Bot / Simulated responses
+                    val user = repository.getChatUserDirect(chatId)
+                    if (user != null && user.isBot) {
+                        delay(800)
+                        handleBotResponse(chatId, processedText)
+                    } else if (chatId == "prime41k") {
+                        delay(1200)
+                        handleDeveloperAutoReply(chatId, processedText)
+                    }
+                }
             }
         }
     }
@@ -298,14 +352,18 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             reply = "Внимание: Соединение зашифровано локально. Модель Gemini временно недоступна, но локальное ядро готово к работе."
         } finally {
             _isBotTyping.value = false
-            repository.insertMessage(
-                MessageEntity(
-                    chatId = chatId,
-                    senderId = chatId,
-                    text = reply
-                )
-            )
-            awardStarsForReply(5)
+            runJsHookReceive(reply) { processedReply ->
+                viewModelScope.launch(Dispatchers.IO) {
+                    repository.insertMessage(
+                        MessageEntity(
+                            chatId = chatId,
+                            senderId = chatId,
+                            text = processedReply
+                        )
+                    )
+                    awardStarsForReply(5)
+                }
+            }
         }
     }
 
@@ -366,13 +424,18 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             else ->
                 "В штатном режиме все пакеты проходят супер-быстро! Хочешь активировать 'IP/Location Kernel Spoofer' в настройках? Это меняет IP на лету."
         }
-        repository.insertMessage(
-            MessageEntity(
-                chatId = chatId,
-                senderId = chatId,
-                text = reply
-            )
-        )
+        runJsHookReceive(reply) { processedReply ->
+            viewModelScope.launch(Dispatchers.IO) {
+                repository.insertMessage(
+                    MessageEntity(
+                        chatId = chatId,
+                        senderId = chatId,
+                        text = processedReply
+                    )
+                )
+                awardStarsForReply(5)
+            }
+        }
     }
 
     fun updateUserProfile(
@@ -539,6 +602,23 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                     } else {
                         changeLocationSpoof("Off", "192.168.1.1")
                     }
+                }
+            }
+
+            // Execute JS lifecycle hook
+            val found = repository.plugins.first().find { it.id == id }
+            if (found != null && found.scriptCode.isNotEmpty()) {
+                viewModelScope.launch(Dispatchers.Main) {
+                    webView?.evaluateJavascript("""
+                        (function() {
+                            try {
+                                ${found.scriptCode}
+                                if (typeof onEnabled === 'function') {
+                                    onEnabled($enabled);
+                                }
+                            } catch(e) {}
+                        })()
+                    """.trimIndent(), null)
                 }
             }
         }
@@ -797,6 +877,158 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             val newBalance = current.starsBalance + amount
             repository.updateSettings(current.copy(starsBalance = newBalance))
             showToast("🎖️ +$amount звезд начислено за ответ собеседника! Баланс: $newBalance")
+        }
+    }
+
+    private fun initJsEngine() {
+        viewModelScope.launch(Dispatchers.Main) {
+            try {
+                val context = getApplication<Application>()
+                webView = WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    addJavascriptInterface(object {
+                        @JavascriptInterface
+                        fun showToast(message: String) {
+                            viewModelScope.launch(Dispatchers.Main) {
+                                showToast(message)
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun awardStars(amount: Int) {
+                            awardStarsForReply(amount)
+                        }
+
+                        @JavascriptInterface
+                        fun sendSystemMessage(text: String) {
+                            val activeChat = currentChatId.value
+                            if (activeChat != null) {
+                                viewModelScope.launch(Dispatchers.IO) {
+                                    repository.insertMessage(
+                                        MessageEntity(
+                                            chatId = activeChat,
+                                            senderId = "system",
+                                            text = text
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }, "Primegram")
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private suspend fun executeJsCodeInWebView(script: String, functionName: String, argument: String): String? {
+        return suspendCancellableCoroutine { continuation ->
+            viewModelScope.launch(Dispatchers.Main) {
+                val wv = webView
+                if (wv == null) {
+                    continuation.resume(null)
+                    return@launch
+                }
+                val wrapped = """
+                    (function() {
+                        try {
+                            $script
+                            if (typeof $functionName === 'function') {
+                                return String($functionName(${JSONObject.quote(argument)}));
+                            }
+                        } catch(e) {
+                            return "ERROR: " + e.message;
+                        }
+                        return null;
+                    })()
+                """.trimIndent()
+                
+                wv.evaluateJavascript(wrapped) { result ->
+                    if (result == null || result == "null") {
+                        continuation.resume(null)
+                    } else {
+                        val parsed = try {
+                            if (result.startsWith("\"") && result.endsWith("\"") && result.length >= 2) {
+                                result.substring(1, result.length - 1)
+                                    .replace("\\\"", "\"")
+                                    .replace("\\\\", "\\")
+                            } else {
+                                result
+                            }
+                        } catch (e: Exception) {
+                            result
+                        }
+                        if (parsed.startsWith("ERROR:")) {
+                            showToast("JS Error in $functionName: $parsed")
+                            continuation.resume(null)
+                        } else {
+                            continuation.resume(parsed)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun runJsHookSend(originalText: String, onComplete: (String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val activePlugins = repository.plugins.first().filter { it.isEnabled }
+            var currentText = originalText
+            for (plugin in activePlugins) {
+                if (plugin.scriptCode.isNotEmpty()) {
+                    val processed = executeJsCodeInWebView(plugin.scriptCode, "onSendMessage", currentText)
+                    if (processed != null) {
+                        currentText = processed
+                    }
+                }
+            }
+            viewModelScope.launch(Dispatchers.Main) {
+                onComplete(currentText)
+            }
+        }
+    }
+
+    fun runJsHookReceive(originalText: String, onComplete: (String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val activePlugins = repository.plugins.first().filter { it.isEnabled }
+            var currentText = originalText
+            for (plugin in activePlugins) {
+                if (plugin.scriptCode.isNotEmpty()) {
+                    val processed = executeJsCodeInWebView(plugin.scriptCode, "onReceiveMessage", currentText)
+                    if (processed != null) {
+                        currentText = processed
+                    }
+                }
+            }
+            viewModelScope.launch(Dispatchers.Main) {
+                onComplete(currentText)
+            }
+        }
+    }
+
+    fun addCustomPlugin(name: String, desc: String, version: String, type: String, scriptCode: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val id = name.toLowerCase().filter { it.isLetter() || it == '_' || it.isDigit() }
+            val finalId = if (id.isEmpty()) "plugin_${System.currentTimeMillis()}" else id
+            val newPlugin = PluginEntity(
+                id = finalId,
+                name = name,
+                version = version,
+                isEnabled = true,
+                type = type,
+                description = desc,
+                scriptCode = scriptCode
+            )
+            repository.insertPlugin(newPlugin)
+            showToast("Кастомный плагин '$name' успешно добавлен! 🟢")
+        }
+    }
+
+    fun deletePlugin(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deletePlugin(id)
+            showToast("❌ Плагин успешно удален.")
         }
     }
 

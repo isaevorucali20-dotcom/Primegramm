@@ -34,4 +34,5 @@ class PrimeRepository(private val dao: PrimeDao) {
 
     suspend fun insertPlugin(plugin: PluginEntity) = dao.insertPlugin(plugin)
     suspend fun setPluginEnabled(pluginId: String, enabled: Boolean) = dao.setPluginEnabled(pluginId, enabled)
+    suspend fun deletePlugin(pluginId: String) = dao.deletePlugin(pluginId)
 }

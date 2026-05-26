@@ -58,6 +58,7 @@ fun PrimegramDashboard(viewModel: PrimeViewModel) {
     var showPartnerProfileDialog by remember { mutableStateOf(false) }
     var showAddProxyDialog by remember { mutableStateOf(false) }
     var showAddMiniAppDialog by remember { mutableStateOf(false) }
+    var showAddPluginDialog by remember { mutableStateOf(false) }
     var activeMiniAppUrl by remember { mutableStateOf<String?>(null) }
     var activeMiniAppName by remember { mutableStateOf("") }
 
@@ -259,6 +260,10 @@ fun PrimegramDashboard(viewModel: PrimeViewModel) {
                             IconButton(onClick = { showAddMiniAppDialog = true }) {
                                 Icon(Icons.Default.Add, contentDescription = "Новый мини-апп")
                             }
+                        } else if (currentScreen == "plugins") {
+                            IconButton(onClick = { showAddPluginDialog = true }) {
+                                Icon(Icons.Default.Add, contentDescription = "Добавить плагин JS")
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -337,6 +342,13 @@ fun PrimegramDashboard(viewModel: PrimeViewModel) {
         AddMiniAppDialog(
             viewModel = viewModel,
             onDismiss = { showAddMiniAppDialog = false }
+        )
+    }
+
+    if (showAddPluginDialog) {
+        AddPluginDialog(
+            viewModel = viewModel,
+            onDismiss = { showAddPluginDialog = false }
         )
     }
 
@@ -1277,6 +1289,17 @@ fun PluginsTab(
 
                     Spacer(modifier = Modifier.width(12.dp))
 
+                    val isSystemPlugin = plugin.id in listOf("anti_recall", "media_saver", "ip_spoofer", "ghost_mode")
+                    if (!isSystemPlugin) {
+                        IconButton(onClick = { viewModel.deletePlugin(plugin.id) }) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Удалить плагин",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+
                     Switch(
                         checked = plugin.isEnabled,
                         onCheckedChange = { viewModel.setPluginEnabled(plugin.id, it) }
@@ -1573,6 +1596,304 @@ fun SettingsTab(
                             Text(level, fontSize = 10.sp)
                         }
                     }
+                }
+            }
+        }
+
+        // 🔒 ПАРАНОИДАЛЬНЫЙ ДИСпетчер БЕЗОПАСНОСТИ & АНОНИМНОСТИ
+        var anonymityExpanded by remember { mutableStateOf(false) }
+        var usabilityExpanded by remember { mutableStateOf(false) }
+        var chatsSpecExpanded by remember { mutableStateOf(false) }
+
+        Text(
+            text = "Параметры безопасности (Режим Параноика)",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        // 1. АНОНИМНОСТЬ И БЕЗОПАСНОСТЬ CARD
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (anonymityExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            ),
+            shape = RoundedCornerShape(16.dp),
+            border = if (anonymityExpanded) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)) else null
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { anonymityExpanded = !anonymityExpanded },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("🔒", style = MaterialTheme.typography.titleMedium)
+                        Column {
+                            Text(
+                                text = "Анонимность и Безопасность",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Onion-микширование, Anti-Frida, Dead Man Switch...",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = if (anonymityExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Expand",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                if (anonymityExpanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Onion Routing
+                    ParanoidFeatureRow(
+                        title = "Мета-микширование (Tor Onion Routing)",
+                        description = "Нарезает сообщение на равные блоки и упаковывает в несколько слоев Tor-подобного шифрования через 3 промежуточных пира.",
+                        iconEmoji = "🧅",
+                        checked = activeSettings.onionRoutingEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("onionRouting", it) }
+                    )
+
+                    // Anti-Frida
+                    ParanoidFeatureRow(
+                        title = "Защита ядра от отладки (Anti-Frida)",
+                        description = "Запускает C++ NDK проверку оперативной памяти на следы Frida, Xposed и отладчиков при каждом сетевом обмене.",
+                        iconEmoji = "🛡️",
+                        checked = activeSettings.antiFridaEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("antiFrida", it) }
+                    )
+
+                    // Memory Shredder
+                    ParanoidFeatureRow(
+                        title = "Военный \"Шредер\" памяти (Zero-Trace)",
+                        description = "Физически стирает ОЗУ и блоки хранилища при удалении чатов, забивая секторы случайными байтами в 3 прохода.",
+                        iconEmoji = "📟",
+                        checked = activeSettings.zeroTraceMemoryShredderEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("memoryShredder", it) }
+                    )
+
+                    // Ed25519 login
+                    ParanoidFeatureRow(
+                        title = "Identity-Free вход (Ed25519 хэш)",
+                        description = "Никаких телефонных номеров или почты. Отпечаток пары Ed25519 ключей служит вашим уникальным адресом в сети.",
+                        iconEmoji = "🔑",
+                        checked = activeSettings.ed25519HashLoginEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("ed25519", it) }
+                    )
+
+                    // Dead man switch
+                    ParanoidFeatureRow(
+                        title = "Канарейка мертвеца (Dead Man's Switch)",
+                        description = "Автоматический таймер самоликвидации: стирает все базы данных и ключи, если вы не вводили пароль более 72 часов.",
+                        iconEmoji = "⏳",
+                        checked = activeSettings.deadMansSwitchEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("deadMansSwitch", it) }
+                    )
+                }
+            }
+        }
+
+        // 2. УДОБСТВО И ЮЗАБИЛИТИ CARD
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (usabilityExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            ),
+            shape = RoundedCornerShape(16.dp),
+            border = if (usabilityExpanded) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)) else null
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { usabilityExpanded = !usabilityExpanded },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("🛠", style = MaterialTheme.typography.titleMedium)
+                        Column {
+                            Text(
+                                text = "Удобство и Юзабилити",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Wi-Fi Hotspot Мост, FTS5 Крипто-поиск, QR линки...",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = if (usabilityExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Expand",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                if (usabilityExpanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Hotspot Mesh
+                    ParanoidFeatureRow(
+                        title = "Автономный Wi-Fi/LTE Мост (Hotspot Mesh)",
+                        description = "Один пир с мобильной связью может раздать анонимную зашифрованную Wi-Fi точку остальным пирам в офлайн-зоне.",
+                        iconEmoji = "⚡",
+                        checked = activeSettings.hotspotMeshBridgeEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("hotspotMesh", it) }
+                    )
+
+                    // FTS5 Crypto
+                    ParanoidFeatureRow(
+                        title = "Крипто-поиск по биометрии (FTS5)",
+                        description = "Полнотекстовый поиск SQLite FTS5, база данных которого децентрализованно шифруется на лету вашим отпечатком.",
+                        iconEmoji = "🔍",
+                        checked = activeSettings.fts5CryptoEngineEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("fts5Crypto", it) }
+                    )
+
+                    // QR Sync
+                    ParanoidFeatureRow(
+                        title = "QR Мульти-девайс синхронизация",
+                        description = "Быстрый перенос истории чатов и активных сокетов на другие устройства по локальной сети через одноразовый сейв-QR.",
+                        iconEmoji = "📲",
+                        checked = activeSettings.qrMultiDeviceSyncEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("qrSync", it) }
+                    )
+
+                    // Adaptive Codec
+                    ParanoidFeatureRow(
+                        title = "Адаптивный H.256 P2P кодек",
+                        description = "Анализирует сетевой пинг и динамически сжимает пересылаемый видеопоток под пропускной лимит локального Mesh линка.",
+                        iconEmoji = "🎬",
+                        checked = activeSettings.adaptiveP2pCodecEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("adaptiveCodec", it) }
+                    )
+
+                    // Battery saver dynamic polling
+                    ParanoidFeatureRow(
+                        title = "Смарт-таймер Dynamic Polling",
+                        description = "Снижает частоту опроса распределенной сети DHT до 10 минут, если гироскоп фиксирует отсутствие движения, экономя ресурс ОЗУ.",
+                        iconEmoji = "🔋",
+                        checked = activeSettings.dynamicPollingBatteryTimerEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("dynamicPolling", it) }
+                    )
+                }
+            }
+        }
+
+        // 3. ФУНКЦИИ ДЛЯ ЧАТОВ CARD
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (chatsSpecExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            ),
+            shape = RoundedCornerShape(16.dp),
+            border = if (chatsSpecExpanded) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)) else null
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { chatsSpecExpanded = !chatsSpecExpanded },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("💬", style = MaterialTheme.typography.titleMedium)
+                        Column {
+                            Text(
+                                text = "Специальные Свойства Чата",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Слепые каналы, Комнаты-призраки, Sharding...",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = if (chatsSpecExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Expand",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                if (chatsSpecExpanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Blind Channels
+                    ParanoidFeatureRow(
+                        title = "\"Слепые\" групповые CRDT каналы",
+                        description = "Децентрализованный групповой чат, где участники не знают полный список группы, а видят лишь соседние ноды пересылки.",
+                        iconEmoji = "👥",
+                        checked = activeSettings.blindGroupChannelsEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("blindChannels", it) }
+                    )
+
+                    // Ephemeral rooms (multicast UDP rooms)
+                    ParanoidFeatureRow(
+                        title = "Комнаты-призраки (UDP Multicast)",
+                        description = "Локальные чаты по мультикасту, записывающиеся только в сверхоперативное ОЗУ (RAM) и исчезающие бесследно при выходе.",
+                        iconEmoji = "👻",
+                        checked = activeSettings.ephemeralMulticastRoomsEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("ephemeralRooms", it) }
+                    )
+
+                    // Message Dropping
+                    ParanoidFeatureRow(
+                        title = "Оффлайн-почтальон (P2P Dropping)",
+                        description = "Позволяет зашифровать сообщение и оставить его на временное транзитное хранение у онлайн-нод, если получатель вне сети.",
+                        iconEmoji = "✉️",
+                        checked = activeSettings.p2pMessageDroppingEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("messageDropping", it) }
+                    )
+
+                    // Media sharding
+                    ParanoidFeatureRow(
+                        title = "Фрагментированное хранилище (Media Sharding)",
+                        description = "Разбивает отправляемые тяжелые медиа на 100 зашифрованных кусочков (шардов) для параллельной раздачи по принципу Торрента.",
+                        iconEmoji = "💿",
+                        checked = activeSettings.distributedMediaShardingEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("mediaSharding", it) }
+                    )
+
+                    // Forking threads (sub-ratchet threads)
+                    ParanoidFeatureRow(
+                        title = "Криптографические ветки Sub-Ratchet",
+                        description = "Режим создания локального суб-древа ответов со своим обособленным ключом шифрования внутри родительской сессии.",
+                        iconEmoji = "🧵",
+                        checked = activeSettings.forkingThreadsEnabled,
+                        onCheckedChange = { viewModel.toggleSecurityFeature("forkingThreads", it) }
+                    )
                 }
             }
         }
@@ -2413,3 +2734,206 @@ fun MiniAppWebViewDialog(
         }
     )
 }
+
+@Composable
+fun ParanoidFeatureRow(
+    title: String,
+    description: String,
+    iconEmoji: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = iconEmoji, fontSize = 20.sp)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
+    }
+}
+
+@Composable
+fun AddPluginDialog(
+    viewModel: PrimeViewModel,
+    onDismiss: () -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var desc by remember { mutableStateOf("") }
+    var version by remember { mutableStateOf("v1.0") }
+    var type by remember { mutableStateOf("Кастомный JS") }
+    
+    val initialScript = """
+        function onSendMessage(msg) {
+            return msg;
+        }
+        function onReceiveMessage(msg) {
+            return msg;
+        }
+        function onEnabled(isEnabled) {
+            Primegram.showToast("Плагин изменен: " + isEnabled);
+        }
+    """.trimIndent()
+    
+    var scriptCode by remember { mutableStateOf(initialScript) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Добавить JS-Плагин 🚀") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Название плагина") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = desc,
+                    onValueChange = { desc = it },
+                    label = { Text("Описание") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = version,
+                        onValueChange = { version = it },
+                        label = { Text("Версия") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = type,
+                        onValueChange = { type = it },
+                        label = { Text("Категория") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                
+                Text(
+                    text = "Выберите шаблон кода:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                ) {
+                    val templates = listOf(
+                        "Пустой" to initialScript,
+                        "ALL CAPS" to """
+                            function onSendMessage(msg) {
+                                return msg.toUpperCase() + " !!!";
+                            }
+                            function onReceiveMessage(msg) {
+                                return msg;
+                            }
+                            function onEnabled(isEnabled) {
+                                Primegram.showToast("ALL CAPS: " + isEnabled);
+                            }
+                        """.trimIndent(),
+                        "Rot13 Шифр" to """
+                            function onSendMessage(msg) {
+                                return "[ROT13] " + msg.replace(/[a-zA-Z]/g, function(c){
+                                    return String.fromCharCode((c<="Z"?90:122)>=(c=c.charCodeAt(0)+13)?c:c-26);
+                                });
+                            }
+                            function onReceiveMessage(msg) {
+                                return msg;
+                            }
+                        """.trimIndent(),
+                        "Авто-Респондер" to """
+                            function onSendMessage(msg) {
+                                return msg;
+                            }
+                            function onReceiveMessage(msg) {
+                                if (msg.toLowerCase().indexOf("как дела") !== -1) {
+                                    Primegram.sendSystemMessage("JS Авто-Реплика: Я работаю круглосуточно на благо анонимности!");
+                                    Primegram.awardStars(5);
+                                }
+                                return msg;
+                            }
+                        """.trimIndent()
+                    )
+                    
+                    templates.forEach { (title, templateCode) ->
+                        Button(
+                            onClick = { scriptCode = templateCode },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        ) {
+                            Text(title)
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = scriptCode,
+                    onValueChange = { scriptCode = it },
+                    label = { Text("JavaScript Код") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        fontSize = 11.sp
+                    ),
+                    maxLines = 15
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (name.isBlank() || scriptCode.isBlank()) {
+                        viewModel.showToast("Название и JavaScript код обязательны!")
+                        return@Button
+                    }
+                    viewModel.addCustomPlugin(name, desc, version, type, scriptCode)
+                    onDismiss()
+                }
+            ) {
+                Text("Установить")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Отмена")
+            }
+        }
+    )
+}
+

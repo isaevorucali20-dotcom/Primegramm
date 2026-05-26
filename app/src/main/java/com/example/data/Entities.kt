@@ -103,5 +103,6 @@ data class PluginEntity(
     val version: String,
     val isEnabled: Boolean,
     val type: String,
-    val description: String
+    val description: String,
+    val scriptCode: String = ""
 )
