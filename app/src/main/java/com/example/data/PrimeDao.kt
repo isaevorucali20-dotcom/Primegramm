@@ -31,6 +31,9 @@ interface PrimeDao {
     @Query("SELECT * FROM messages_table WHERE chatId = :chatId ORDER BY timestamp ASC")
     fun getMessagesForChatFlow(chatId: String): Flow<List<MessageEntity>>
 
+    @Query("SELECT * FROM messages_table WHERE chatId = :chatId ORDER BY timestamp ASC")
+    suspend fun getMessagesForChatDirect(chatId: String): List<MessageEntity>
+
     @Query("SELECT * FROM messages_table ORDER BY timestamp DESC")
     fun getAllMessagesFlow(): Flow<List<MessageEntity>>
 

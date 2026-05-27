@@ -1135,9 +1135,295 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // --- ALIVE PLAYLIST & CLOSER DATA STATES ---
+    val nearbyPeers = MutableStateFlow<List<NearbyPeer>>(emptyList())
+    val airEchoes = MutableStateFlow<List<AirEcho>>(emptyList())
+    val activeSharedMusicPeer = MutableStateFlow<NearbyPeer?>(null)
+
+    fun startAlivePlaylistDiscovery() {
+        if (nearbyPeers.value.isNotEmpty()) return
+        
+        // Initialize 4 beautifully simulated realistic nearby people in space 
+        nearbyPeers.value = listOf(
+            NearbyPeer(
+                id = "metro_music_dj",
+                name = "Алексей (Метро Диджей)",
+                avatarColor = 0xFF4CAF50,
+                distanceMeters = 8,
+                currentTrack = "Танцуйте",
+                currentArtist = "ATL",
+                trackDurationSeconds = 210,
+                currentTrackProgressSeconds = 120
+            ),
+            NearbyPeer(
+                id = "alina_sirotkina",
+                name = "Алина ✨",
+                avatarColor = 0xFFE91E63,
+                distanceMeters = 14,
+                currentTrack = "Выше домов",
+                currentArtist = "Sirotkin",
+                trackDurationSeconds = 195,
+                currentTrackProgressSeconds = 45
+            ),
+            NearbyPeer(
+                id = "kirill_panelka",
+                name = "Кирилл (Red)",
+                avatarColor = 0xFF9C27B0,
+                distanceMeters = 27,
+                currentTrack = "Панелька",
+                currentArtist = "Хаски",
+                trackDurationSeconds = 180,
+                currentTrackProgressSeconds = 90
+            ),
+            NearbyPeer(
+                id = "sonya_spring",
+                name = "Соня 🌸",
+                avatarColor = 0xFF00BCD4,
+                distanceMeters = 43,
+                currentTrack = "Весна",
+                currentArtist = "Mičl",
+                trackDurationSeconds = 230,
+                currentTrackProgressSeconds = 175
+            )
+        )
+
+        // Prepopulate Air Echoes (digital graffiti)
+        airEchoes.value = listOf(
+            AirEcho(
+                id = "echo_1",
+                songName = "Океан",
+                artistName = "L'One",
+                coordinates = "55.7558° N, 37.6173° E (Кофейня Даблби)",
+                multiplier = 14,
+                leftBy = "Максим"
+            ),
+            AirEcho(
+                id = "echo_2",
+                songName = "Выпускной",
+                artistName = "Баста",
+                coordinates = "55.7522° N, 37.6155° E (Рядом со сценой)",
+                multiplier = 6,
+                leftBy = "Юля"
+            )
+        )
+
+        // Launch real-time ticking progress timer for all songs
+        viewModelScope.launch {
+            while (true) {
+                delay(1000)
+                nearbyPeers.value = nearbyPeers.value.map { peer ->
+                    val nextProgress = (peer.currentTrackProgressSeconds + 1) % peer.trackDurationSeconds
+                    peer.copy(currentTrackProgressSeconds = nextProgress)
+                }
+                
+                // If there's an active streaming peer, also keep it in sync
+                activeSharedMusicPeer.value?.let { active ->
+                    val updated = nearbyPeers.value.find { it.id == active.id }
+                    if (updated != null) {
+                        activeSharedMusicPeer.value = updated
+                    }
+                }
+            }
+        }
+    }
+
+    fun selectMusicPeer(peer: NearbyPeer?) {
+        activeSharedMusicPeer.value = peer
+    }
+
+    fun winkAtPeer(peerId: String) {
+        viewModelScope.launch {
+            val list = nearbyPeers.value.map { peer ->
+                if (peer.id == peerId) {
+                    if (peer.isWinked) return@launch
+                    
+                    val updatedPeer = peer.copy(isWinked = true, winksMeBack = true)
+                    
+                    // Add this peer to actual Dialogs database so the user can interact!
+                    repository.insertOrUpdateChatUser(
+                        ChatUserEntity(
+                            id = peer.id,
+                            displayName = peer.name + " 🎵 DJ Wave",
+                            username = "@" + peer.id,
+                            bio = "Найден рядом в Alive Playlist под трек '${peer.currentArtist} - ${peer.currentTrack}'",
+                            avatarColor = peer.avatarColor
+                        )
+                    )
+                    
+                    // Insert starter conversation mutual spark message
+                    repository.insertMessage(
+                        MessageEntity(
+                            chatId = peer.id,
+                            senderId = peer.id,
+                            text = "💖 Взаимное совпадение музыкального вкуса! Мы оба слушаем трек '${peer.currentArtist} - ${peer.currentTrack}'! Рад знакомству ✨ Давай общаться!"
+                        )
+                    )
+                    
+                    sendStatusBarNotification("Взаимный лайк! 💖", "${peer.name} подмигнул(а) в ответ!")
+                    showToast("💖 Взаимное совпадение! Чат с ${peer.name} открыт в закладке 'Диалоги'!")
+                    
+                    updatedPeer
+                } else {
+                    peer
+                }
+            }
+            nearbyPeers.value = list
+        }
+    }
+
+    fun leaveAirEcho(song: String, artist: String) {
+        if (song.isBlank() || artist.isBlank()) return
+        val newEcho = AirEcho(
+            id = "echo_" + System.currentTimeMillis(),
+            songName = song,
+            artistName = artist,
+            coordinates = "55.7539° N, 37.6208° E (Оставлено здесь)",
+            multiplier = (2..12).random(),
+            leftBy = "Вы"
+        )
+        airEchoes.value = listOf(newEcho) + airEchoes.value
+        showToast("🎵 Трек '$artist - $song' успешно подвешен в пространстве!")
+    }
+
+    // --- CLOSER RELATION SCORE & CAPSULE SYSTEM ---
+    suspend fun calculateRelationStats(chatId: String): RelationStats {
+        return withContext(Dispatchers.IO) {
+            val msgs = repository.getMessagesForChatDirect(chatId)
+            
+            // Calculate total words and analyze local sentiment/coldness triggers
+            var totalWords = 0
+            var shortWordColdCount = 0
+            var intellectualDepthCount = 0
+            var emotionalBonusCount = 0
+            var longestText = ""
+            var firstMedia: String? = null
+
+            msgs.forEach { m ->
+                val words = m.text.split(Regex("\\s+")).filter { it.isNotBlank() }
+                totalWords += words.size
+                
+                // Track longest message
+                if (m.text.length > longestText.length && !m.text.contains("Взаимное совпадение")) {
+                    longestText = m.text
+                }
+                
+                // Track first media
+                if (firstMedia == null && (m.isOneTimeMedia || m.mediaSavedReplicaPath != null)) {
+                    firstMedia = m.mediaSavedReplicaPath ?: "Камера шифрования"
+                }
+
+                // Cold keywords triggers
+                val lowercaseText = m.text.toLowerCase().trim()
+                if (lowercaseText == "ок" || lowercaseText == "ясно" || lowercaseText == "норм" || lowercaseText == "мм" || lowercaseText == "понятно" || lowercaseText == "угу" || lowercaseText == "к") {
+                    shortWordColdCount++
+                }
+
+                // High intellectual density / long warm message
+                if (m.text.length > 70) {
+                    intellectualDepthCount++
+                }
+
+                // Emotional emojis
+                if (m.text.contains("♥") || m.text.contains("❤") || m.text.contains("💖") || m.text.contains("😘") || m.text.contains("😍") || m.text.contains("😊") || m.text.contains("✨") || m.text.contains("🔥")) {
+                    emotionalBonusCount++
+                }
+            }
+
+            // Closeness scorecard calculation
+            var basePercent = 75
+            if (msgs.isEmpty()) {
+                basePercent = 50
+            } else {
+                // More messages = slightly higher affinity
+                basePercent = (msgs.size * 3 + 45).coerceAtMost(90)
+                
+                // Penalty for cold answers
+                basePercent -= (shortWordColdCount * 4)
+                
+                // Bonus for intellectual messages and emotional indicators
+                basePercent += (intellectualDepthCount * 5)
+                basePercent += (emotionalBonusCount * 4)
+                
+                basePercent = basePercent.coerceIn(15, 100)
+            }
+
+            if (longestText.isBlank()) {
+                longestText = "«Мы только начали наш путь, каждое слово еще хранит будущую теплоту...»"
+            }
+
+            RelationStats(
+                totalWords = totalWords,
+                closenessPercent = basePercent,
+                longestMessage = longestText,
+                firstSharedImage = firstMedia ?: "Шифрованное фото #1: Инициализировано при первом рукопожатии сокетов",
+                interactivePeakSession = "Воскресенье, 19:40 (Полноценный сеанс Onion-сессии, пинг 4ms)"
+            )
+        }
+    }
+
+    // Live instant raw voice message broadcast dispatcher - strictly zero backup previews, zero censuring delete buttons
+    fun sendImportantVoiceCapsule(chatId: String, simulatedDurationSeconds: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val textRepresentation = "🎙️ [Голосовой эфир: Только Живой Звук • $simulatedDurationSeconds сек] (Прослушивание и удаление заблокированы ядром)"
+            val newMsg = MessageEntity(
+                chatId = chatId,
+                senderId = "me",
+                text = textRepresentation
+            )
+            repository.insertMessage(newMsg)
+            
+            // Trigger companion reply with high probability
+            delay(1500)
+            val replies = listOf(
+                "Твой голос звучит так близко... Кажется, расстояние совсем пропало. Рад(а), что ты поделился этим. ❤️",
+                "Это именно то, что мне нужно было услышать сейчас. Спасибо за твою честность. 🕊️",
+                "Твой настоящий, нецензурированный голос — это лучшая капсула близости в мире."
+            )
+            
+            val companionReply = MessageEntity(
+                chatId = chatId,
+                senderId = chatId,
+                text = "🎙️ [Живой Ответ] " + replies.random()
+            )
+            repository.insertMessage(companionReply)
+            awardStarsForReply(5)
+            sendStatusBarNotification("Ответ близости", "Ваш собеседник ответил на важные слова!")
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         pgpServer?.stop()
         pgpClient.disconnect()
     }
 }
+
+data class NearbyPeer(
+    val id: String,
+    val name: String,
+    val avatarColor: Long,
+    val distanceMeters: Int,
+    val currentTrack: String,
+    val currentArtist: String,
+    val trackDurationSeconds: Int,
+    val currentTrackProgressSeconds: Int,
+    val isWinked: Boolean = false,
+    val winksMeBack: Boolean = false
+)
+
+data class AirEcho(
+    val id: String,
+    val songName: String,
+    val artistName: String,
+    val coordinates: String,
+    val multiplier: Int,
+    val leftBy: String
+)
+
+data class RelationStats(
+    val totalWords: Int,
+    val closenessPercent: Int,
+    val longestMessage: String,
+    val firstSharedImage: String,
+    val interactivePeakSession: String
+)

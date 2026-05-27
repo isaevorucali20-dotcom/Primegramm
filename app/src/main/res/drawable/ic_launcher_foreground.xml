@@ -4,20 +4,15 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Beautiful minimalist Telegram white plane with tail depth -->
+    <!-- Beautiful, clean minimalist white Telegram plane scaled inside safe-zone -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M25,51 L77,25 L69,69 L56,58 L48,65 L49,56 Z" />
-    <!-- Tail accent for minimalist shadow depth -->
+        android:pathData="M29,51 L79,25 L68,73 L54,60 L45,68 L47,56 Z" />
     <path
-        android:fillColor="#B0BEC5"
-        android:pathData="M49,56 L56,58 L48,65 Z" />
-    <!-- Premium Security Cyber Shield representing Primegram's P2P Kernel protection -->
+        android:fillColor="#B2EBF2"
+        android:pathData="M47,56 L54,60 L45,68 Z" />
+    <!-- Prime-defense lock accent -->
     <path
         android:fillColor="#00E5FF"
-        android:pathData="M78,62c0,8 -8,14 -8,14s-8,-6 -8,-14V52l8,-3.5 8,3.5v10z" />
-    <!-- Keyhole or lock accent -->
-    <path
-        android:fillColor="#006064"
-        android:pathData="M70,57a1.5,1.5 0,1 0,0 3a1.5,1.5 0,1 0,0 -3" />
+        android:pathData="M78,60c0,6 -6,11 -6,11s-6,-5 -6,-11V52l6,-3l6,3v8z" />
 </vector>

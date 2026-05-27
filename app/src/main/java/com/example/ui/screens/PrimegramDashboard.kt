@@ -132,6 +132,7 @@ fun PrimegramDashboard(viewModel: PrimeViewModel) {
                 // Navigation Items
                 val menuItems = listOf(
                     Triple("chats", "Диалоги", Icons.Default.Chat),
+                    Triple("alive", "Эфир (Alive Playlist)", Icons.Default.MusicNote),
                     Triple("proxy", "Управление Прокси", Icons.Default.VpnLock),
                     Triple("plugins", "Плагины (Mods)", Icons.Default.Extension),
                     Triple("miniapps", "Мини-Приложения", Icons.Default.Apps),
@@ -296,6 +297,7 @@ fun PrimegramDashboard(viewModel: PrimeViewModel) {
                         }
                     }
                     "proxy" -> ProxyTab(viewModel = viewModel, modifier = Modifier.fillMaxSize())
+                    "alive" -> AlivePlaylistTab(viewModel = viewModel, modifier = Modifier.fillMaxSize())
                     "plugins" -> PluginsTab(viewModel = viewModel, modifier = Modifier.fillMaxSize())
                     "miniapps" -> MiniAppsTab(
                         viewModel = viewModel,
@@ -554,6 +556,26 @@ fun ChatConversationScreen(
     var simulatedTimeSeconds by remember { mutableStateOf(0) }
     var knockClicksCount by remember { mutableStateOf(0) }
 
+    // --- «БЛИЖЕ» (Closer) RELATIONSHIP ENGINE STATES ---
+    var closerExpanded by remember { mutableStateOf(false) }
+    var relationStats by remember { mutableStateOf<com.example.ui.RelationStats?>(null) }
+    var voiceRecordSeconds by remember { mutableStateOf(0) }
+    var isVoiceRecordingActive by remember { mutableStateOf(false) }
+
+    LaunchedEffect(chatId, messages) {
+        relationStats = viewModel.calculateRelationStats(chatId)
+    }
+
+    LaunchedEffect(isVoiceRecordingActive) {
+        if (isVoiceRecordingActive) {
+            voiceRecordSeconds = 0
+            while (isVoiceRecordingActive) {
+                kotlinx.coroutines.delay(1000)
+                voiceRecordSeconds++
+            }
+        }
+    }
+
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -611,8 +633,12 @@ fun ChatConversationScreen(
                 onClick = {
                     knockClicksCount++
                     // Trigger dynamic vibration on actual tap
-                    val vibrator = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
-                    vibrator?.vibrate(60)
+                    try {
+                        val vibrator = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                        vibrator?.vibrate(60)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                     
                     if (knockClicksCount >= 3) {
                         viewModel.unlockChatWithKnock(chatId)
@@ -700,17 +726,35 @@ fun ChatConversationScreen(
                             )
                         }
 
-                        // Cinema Mesh Toggle Button
-                        IconButton(
-                            onClick = { cinemaMeshExpanded = !cinemaMeshExpanded },
-                            modifier = Modifier.size(24.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(
-                                imageVector = if (cinemaMeshExpanded) Icons.Default.Movie else Icons.Default.Movie,
-                                contentDescription = "Cinema Mesh",
-                                tint = if (cinemaMeshExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            // "Closer" Romantic Spark Trigger
+                            IconButton(
+                                onClick = { closerExpanded = !closerExpanded },
+                                modifier = Modifier.size(24.dp).testTag("closer_toggle_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Favorite,
+                                    contentDescription = "Ближе",
+                                    tint = if (closerExpanded) Color(0xFFFF4081) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            // Cinema Mesh Toggle Button
+                            IconButton(
+                                onClick = { cinemaMeshExpanded = !cinemaMeshExpanded },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Movie,
+                                    contentDescription = "Cinema Mesh",
+                                    tint = if (cinemaMeshExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
 
@@ -877,6 +921,281 @@ fun ChatConversationScreen(
                                 fontSize = 9.sp,
                                 fontFamily = FontFamily.Monospace
                             )
+                        }
+                    }
+                }
+            }
+
+            // 💖 «БЛИЖЕ» (CLOSER) RELATIONSHIP PULSE PANEL
+            if (closerExpanded) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .testTag("closer_relationship_panel"),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color(0xFFFF4081).copy(alpha = 0.3f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        // Title header
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("💖", fontSize = 18.sp)
+                                Text(
+                                    text = "«Ближе» • Резонанс Чувств",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color(0xFFFF4081)
+                                )
+                            }
+                            IconButton(onClick = { closerExpanded = false }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.LightGray, modifier = Modifier.size(14.dp))
+                            }
+                        }
+
+                        // Affinity indicator warmth score
+                        val percent = relationStats?.closenessPercent ?: 75
+                        val statusText = when {
+                            percent >= 85 -> "Идеальный резонанс. Вы звучите на одной частоте. ✨"
+                            percent >= 60 -> "Хороший линк. Но слова становятся короче. Не забывайте о тепле. 🌻"
+                            else -> "Линк остывает. Период легкого отдаления. Самое время сказать важное. 💔"
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFFF4081).copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(
+                                    progress = percent / 100f,
+                                    color = Color(0xFFFF4081),
+                                    trackColor = Color(0xFFFF4081).copy(alpha = 0.15f),
+                                    strokeWidth = 4.dp,
+                                    modifier = Modifier.size(54.dp)
+                                )
+                                Text(
+                                    text = "$percent%",
+                                    color = Color(0xFFFF4081),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+
+                            Column {
+                                Text(
+                                    text = "Коэффициент Близости",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = statusText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        // Digital Time Capsule section
+                        Text(
+                            text = "📦 Родовые Скрижали (Капсула Времени)",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // First photo
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                    Column {
+                                        Text("Ваш первый снимок", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                        Text(text = relationStats?.firstSharedImage ?: "Ищется фото...", style = MaterialTheme.typography.bodySmall, color = Color.Gray, fontSize = 10.sp)
+                                    }
+                                }
+                            }
+
+                            // Longest text
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                    Column {
+                                        Text("Самое теплое / длинное сообщение", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            text = if ((relationStats?.longestMessage?.length ?: 0) > 60)
+                                                "«" + relationStats?.longestMessage?.take(60) + "...»"
+                                            else "«" + (relationStats?.longestMessage ?: "") + "»",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.LightGray,
+                                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Peak simultaneous presence
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.HourglassEmpty, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                    Column {
+                                        Text("Пик одновременного онлайна", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                        Text(text = relationStats?.interactivePeakSession ?: "Поиск пика...", style = MaterialTheme.typography.bodySmall, color = Color.Gray, fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+
+                        // VOICE BROADCAST: «СКАЗАТЬ ВАЖНОЕ» PANEL
+                        if (isVoiceRecordingActive) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(1.dp, Color.Red, RoundedCornerShape(12.dp))
+                                    .background(Color.Red.copy(alpha = 0.05f))
+                                    .padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.Red)
+                                    )
+                                    Text(
+                                        text = "ПРЯМОЙ ЭФИР: ИДЕТ ЗАПИСЬ... ${voiceRecordSeconds}с",
+                                        color = Color.Red,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+
+                                // Bouncing micro waves during recording
+                                Row(
+                                    modifier = Modifier.height(20.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    repeat(12) { index ->
+                                        val heightVal = (5..18).random()
+                                        Box(
+                                            modifier = Modifier
+                                                .width(2.5.dp)
+                                                .height(heightVal.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.Red)
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = "Запись идет в сыром виде. Исключена цензура, перезапись, предпрослушивание или удаление.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 9.sp,
+                                    color = Color.LightGray,
+                                    textAlign = TextAlign.Center
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            viewModel.sendImportantVoiceCapsule(chatId, voiceRecordSeconds)
+                                            isVoiceRecordingActive = false
+                                            viewModel.showToast("🎙️ Капсула отправлена напрямую собеседнику.")
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Отправить в Эфир 🚀", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { isVoiceRecordingActive = false },
+                                        border = BorderStroke(1.dp, Color.Gray),
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Сброс", fontSize = 11.sp, color = Color.LightGray)
+                                    }
+                                }
+                            }
+                        } else {
+                            // "Сказать Важное" micro launcher button
+                            Button(
+                                onClick = {
+                                    isVoiceRecordingActive = true
+                                    voiceRecordSeconds = 0
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4081)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                                    .testTag("say_important_button")
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Mic, contentDescription = null, tint = Color.White)
+                                    Text(
+                                        text = "СКАЗАТЬ ВАЖНОЕ (СЫРОЙ ГОЛОС)",
+                                        fontWeight = FontWeight.Black,
+                                        color = Color.White
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1066,8 +1385,12 @@ fun ChatConversationScreen(
                             IconButton(
                                 onClick = {
                                     // Trigger brief vibration Morse sequence
-                                    val vibrator = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
-                                    vibrator?.vibrate(longArrayOf(0, 150, 80, 150, 80, 300), -1)
+                                    try {
+                                        val vibrator = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                                        vibrator?.vibrate(longArrayOf(0, 150, 80, 150, 80, 300), -1)
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                    }
                                     viewModel.showToast("🔊 ТАКТИЛЬНЫЙ ШЕПОТ: Сообщение перекодировано в вибро-паттерн.")
                                 },
                                 modifier = Modifier.size(16.dp)
@@ -3448,5 +3771,564 @@ fun AddPluginDialog(
             }
         }
     )
+}
+
+@Composable
+fun AlivePlaylistTab(
+    viewModel: PrimeViewModel,
+    modifier: Modifier = Modifier
+) {
+    val nearbyPeers by viewModel.nearbyPeers.collectAsState()
+    val airEchoes by viewModel.airEchoes.collectAsState()
+    val activeMusicPeer by viewModel.activeSharedMusicPeer.collectAsState()
+
+    var customSong by remember { mutableStateOf("") }
+    var customArtist by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        viewModel.startAlivePlaylistDiscovery()
+    }
+
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // RADAR HEADER & BRIEF DESCRIPTION
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f)
+            ),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Breathing radar animation panel
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                    )
+                    Icon(
+                        imageVector = Icons.Default.MusicNote,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "📡 ЭФИР «ALIVE PLAYLIST»",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Подключайтесь к наушникам людей в радиусе 50 метров без интернета (Wi-Fi Direct + UDP). Слушайте музыку в реальном времени.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // RADAR SIMULATOR RINGS VIEW
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF0F171E))
+                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            // Pulsing circles in background
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val centerOffset = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
+                drawCircle(
+                    color = Color(0x3300E5FF),
+                    radius = 50.dp.toPx(),
+                    center = centerOffset,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                )
+                drawCircle(
+                    color = Color(0x2200E5FF),
+                    radius = 90.dp.toPx(),
+                    center = centerOffset,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                )
+                drawCircle(
+                    color = Color(0x1100E5FF),
+                    radius = 130.dp.toPx(),
+                    center = centerOffset,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                )
+                
+                // Sweep line representing proximity audit
+                val time = System.currentTimeMillis() % 4000
+                val angle = (time / 4000f) * 360f
+                val length = 150.dp.toPx()
+                val endX = centerOffset.x + length * kotlin.math.cos(Math.toRadians(angle.toDouble())).toFloat()
+                val endY = centerOffset.y + length * kotlin.math.sin(Math.toRadians(angle.toDouble())).toFloat()
+                
+                drawLine(
+                    color = Color(0x7700E5FF),
+                    start = centerOffset,
+                    end = androidx.compose.ui.geometry.Offset(endX, endY),
+                    strokeWidth = 2.dp.toPx()
+                )
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.Hearing,
+                    contentDescription = null,
+                    tint = Color(0xFF00E5FF),
+                    modifier = Modifier.size(32.dp)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Сканирование пространства...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF00E5FF),
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${nearbyPeers.size} узлов «AlivePlaylist Node» найдено в метро",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.LightGray,
+                    fontSize = 10.sp
+                )
+            }
+        }
+
+        // LIST OF NEARBY PEERS
+        Text(
+            text = "Люди рядом и их музыкальный поток",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        nearbyPeers.forEach { peer ->
+            val isStreaming = activeMusicPeer?.id == peer.id
+            val percentProgress = peer.currentTrackProgressSeconds.toFloat() / peer.trackDurationSeconds.toFloat()
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("peer_card_${peer.id}"),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isStreaming) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                ),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(
+                    1.dp,
+                    if (isStreaming) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(peer.avatarColor)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = peer.name.take(1),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Column {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = peer.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "• ${peer.distanceMeters}м рядом",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Text(
+                                        text = "${peer.currentArtist} — ${peer.currentTrack}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+
+                        // Spark or Wink back badge indicator
+                        if (peer.isWinked) {
+                            Box(
+                                modifier = Modifier
+                                    .background(Color(0xFFFF4081).copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "❤️ Взаимно!",
+                                    color = Color(0xFFFF4081),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    // Music progress bar ticked by state
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        LinearProgressIndicator(
+                            progress = percentProgress,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "${peer.currentTrackProgressSeconds / 60}:${String.format("%02d", peer.currentTrackProgressSeconds % 60)}",
+                                fontSize = 9.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${peer.trackDurationSeconds / 60}:${String.format("%02d", peer.trackDurationSeconds % 60)}",
+                                fontSize = 9.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Bottom stream and wink actions
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                if (isStreaming) {
+                                    viewModel.selectMusicPeer(null)
+                                } else {
+                                    viewModel.selectMusicPeer(peer)
+                                    viewModel.showToast("🎧 Успешное подключение к потоку ${peer.name}. Задержка UDP: 24ms")
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isStreaming) Color.Gray else MaterialTheme.colorScheme.primary
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f).height(34.dp),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isStreaming) Icons.Default.Pause else Icons.Default.Hearing,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    text = if (isStreaming) "Отключить Эфир" else "Слушать Вместе",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.winkAtPeer(peer.id)
+                            },
+                            enabled = !peer.isWinked,
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFF4081)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFFFF4081)
+                            ),
+                            modifier = Modifier.weight(1f).height(34.dp),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Favorite,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(13.dp),
+                                    tint = Color(0xFFFF4081)
+                                )
+                                Text(
+                                    text = if (peer.isWinked) "Подмигнуто" else "Подмигнуть",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // SIMULATED HEADSETS AUDIO ENGINES STATS PANEL
+        if (activeMusicPeer != null) {
+            val peer = activeMusicPeer!!
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.Black),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Green)
+                            )
+                            Text(
+                                text = "АКТИВНЫЙ UDP АУДИОМОСТ С ${peer.name.toUpperCase()}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                        IconButton(onClick = { viewModel.selectMusicPeer(null) }, modifier = Modifier.size(16.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.LightGray, modifier = Modifier.size(12.dp))
+                        }
+                    }
+
+                    // Ticking wavy bars simulating real-time audio stream buffer levels
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(24.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        repeat(16) { index ->
+                            val heightOffset = (10..22).random()
+                            val isPulse = System.currentTimeMillis() % 400 > index * 10
+                            Box(
+                                modifier = Modifier
+                                    .padding(horizontal = 1.5.dp)
+                                    .width(3.dp)
+                                    .height(if (isPulse) heightOffset.dp else 4.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Синхронизация NTP: Jitter 4ms | Буфер RAM: 15 кадров (24ms разница) | Кодек Opus-P2P",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 8.sp,
+                        color = Color.Gray,
+                        fontFamily = FontFamily.Monospace,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+
+        // AIR ECHO SECTION (DIGITAL GRAFFITI)
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.08f)
+            ),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f))
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Campaign,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary
+                    )
+                    Text(
+                        text = "Эхо-режим (Оставить музыкальный след)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+
+                Text(
+                    text = "Оставьте трек 'висеть' в пространстве. Люди, зашедшие в эту локацию после вас, смогут поймать и услышать вашу волну.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                OutlinedTextField(
+                    value = customArtist,
+                    onValueChange = { customArtist = it },
+                    label = { Text("Исполнитель / Группа") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = customSong,
+                    onValueChange = { customSong = it },
+                    label = { Text("Название трека") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Button(
+                    onClick = {
+                        if (customArtist.isNotBlank() && customSong.isNotBlank()) {
+                            viewModel.leaveAirEcho(customSong, customArtist)
+                            customArtist = ""
+                            customSong = ""
+                        } else {
+                            viewModel.showToast("Введите исполнителя и песню!")
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Подвесить трек в этой геоточке 🪐", fontWeight = FontWeight.Black)
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                Text(
+                    text = "Активные Эхо-Граффити вокруг вас",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                airEchoes.forEach { echo ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .padding(10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("📻", fontSize = 18.sp)
+                            Column {
+                                Text(
+                                    text = "${echo.artistName} — ${echo.songName}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Оставил: ${echo.leftBy} • ${echo.coordinates}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 9.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "x${echo.multiplier} ловов",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 

@@ -14,6 +14,7 @@ class PrimeRepository(private val dao: PrimeDao) {
     suspend fun updateSettings(settings: PrimeSettingsEntity) = dao.insertOrUpdateSettings(settings)
 
     fun getMessagesForChat(chatId: String): Flow<List<MessageEntity>> = dao.getMessagesForChatFlow(chatId)
+    suspend fun getMessagesForChatDirect(chatId: String): List<MessageEntity> = dao.getMessagesForChatDirect(chatId)
 
     suspend fun getChatUserDirect(userId: String) = dao.getChatUserDirect(userId)
     suspend fun insertOrUpdateChatUser(user: ChatUserEntity) = dao.insertOrUpdateChatUser(user)
