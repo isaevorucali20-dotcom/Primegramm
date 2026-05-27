@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.Context
 import android.webkit.WebView
 import android.webkit.JavascriptInterface
 import androidx.lifecycle.AndroidViewModel
@@ -11,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
@@ -54,13 +56,75 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
     private val _isBotTyping = MutableStateFlow(false)
     val isBotTyping: StateFlow<Boolean> = _isBotTyping.asStateFlow()
 
-    init {
-        // Initialize Default Values if Empty
+    private val _partnerBatteryLevel = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val partnerBatteryLevel: StateFlow<Map<String, Int>> = _partnerBatteryLevel.asStateFlow()
+
+    private val _knockUnlocked = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val knockUnlocked: StateFlow<Map<String, Boolean>> = _knockUnlocked.asStateFlow()
+
+    private val _revealedSchrodingerMessages = MutableStateFlow<Map<Long, Boolean>>(emptyMap())
+    val revealedSchrodingerMessages: StateFlow<Map<Long, Boolean>> = _revealedSchrodingerMessages.asStateFlow()
+
+    // --- PGP P2P Engine (Primegramm Protocol) ---
+    private val _p2pLogs = MutableStateFlow<List<String>>(emptyList())
+    val p2pLogs: StateFlow<List<String>> = _p2pLogs.asStateFlow()
+
+    private val _p2pServerStatus = MutableStateFlow("Остановлен")
+    val p2pServerStatus: StateFlow<String> = _p2pServerStatus.asStateFlow()
+
+    private val _p2pClientConnected = MutableStateFlow(false)
+    val p2pClientConnected: StateFlow<Boolean> = _p2pClientConnected.asStateFlow()
+
+    private var pgpServer: PgpP2pServer? = null
+    private val pgpClient = PgpP2pClient()
+
+    fun setPartnerBattery(chatId: String, level: Int) {
+        _partnerBatteryLevel.value = _partnerBatteryLevel.value + (chatId to level)
+    }
+
+    fun chargePartner(chatId: String) {
+        val currentLevel = _partnerBatteryLevel.value[chatId] ?: 8
+        val newLevel = (currentLevel + 12).coerceAtMost(100)
+        _partnerBatteryLevel.value = _partnerBatteryLevel.value + (chatId to newLevel)
+        
         viewModelScope.launch(Dispatchers.IO) {
-            setupInitialDatabaseData()
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            val newBalance = current.starsBalance + 15
+            repository.updateSettings(current.copy(starsBalance = newBalance))
+            
+            repository.insertMessage(
+                MessageEntity(
+                    chatId = chatId,
+                    senderId = "system",
+                    text = "🔌 Жест взаимной поддержки: Передача заряда по OTG-кабелю зафиксирована! Начислено +15 звезд за поддержку живучести P2P-узла. Карма сети повысилась."
+                )
+            )
+            
+            viewModelScope.launch(Dispatchers.Main) {
+                showToast("⚡ Заряд передан! Собеседник заряжен до $newLevel%. Вы получили +15 звезд!")
+            }
         }
-        startPgpServer()
-        initJsEngine()
+    }
+
+    fun unlockChatWithKnock(chatId: String) {
+        _knockUnlocked.value = _knockUnlocked.value + (chatId to true)
+        showToast("🔓 Стук-код принят! Сокет памяти $chatId дешифрован.")
+    }
+
+    fun toggleSchrodingerReveal(messageId: Long) {
+        val current = _revealedSchrodingerMessages.value[messageId] ?: false
+        _revealedSchrodingerMessages.value = _revealedSchrodingerMessages.value + (messageId to !current)
+    }
+
+    init {
+        viewModelScope.launch {
+            // Initialize Default Values if Empty
+            withContext(Dispatchers.IO) {
+                setupInitialDatabaseData()
+            }
+            startPgpServer()
+            initJsEngine()
+        }
     }
 
     private suspend fun setupInitialDatabaseData() {
@@ -362,6 +426,7 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     )
                     awardStarsForReply(5)
+                    sendStatusBarNotification("Prime Secure AI", processedReply)
                 }
             }
         }
@@ -434,6 +499,7 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 )
                 awardStarsForReply(5)
+                sendStatusBarNotification("Святослав Prime", processedReply)
             }
         }
     }
@@ -750,19 +816,6 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- PGP P2P Engine (Primegramm Protocol) ---
-    private val _p2pLogs = MutableStateFlow<List<String>>(emptyList())
-    val p2pLogs: StateFlow<List<String>> = _p2pLogs.asStateFlow()
-
-    private val _p2pServerStatus = MutableStateFlow("Остановлен")
-    val p2pServerStatus: StateFlow<String> = _p2pServerStatus.asStateFlow()
-
-    private val _p2pClientConnected = MutableStateFlow(false)
-    val p2pClientConnected: StateFlow<Boolean> = _p2pClientConnected.asStateFlow()
-
-    private var pgpServer: PgpP2pServer? = null
-    private val pgpClient = PgpP2pClient()
-
     fun startPgpServer() {
         viewModelScope.launch {
             pgpServer?.stop()
@@ -772,10 +825,15 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                     viewModelScope.launch(Dispatchers.Main) {
                         val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
                         _p2pLogs.value = _p2pLogs.value + "[$timestamp] Собеседник ($sender): $text"
+                        sendStatusBarNotification("Сообщение от P2P пира ($sender)", text)
                     }
                 },
                 onStatusChanged = { status ->
-                    _p2pServerStatus.value = status
+                    viewModelScope.launch(Dispatchers.Main) {
+                        try {
+                            _p2pServerStatus.value = status
+                        } catch (_: Exception) {}
+                    }
                 }
             )
             pgpServer?.start()
@@ -867,6 +925,33 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (featureMsg.isNotEmpty()) {
                 showToast(featureMsg)
+            }
+        }
+    }
+
+    fun toggleAllCoreFeatures(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            val updated = current.copy(
+                onionRoutingEnabled = enabled,
+                antiFridaEnabled = enabled,
+                zeroTraceMemoryShredderEnabled = enabled,
+                ed25519HashLoginEnabled = enabled,
+                deadMansSwitchEnabled = enabled,
+                hotspotMeshBridgeEnabled = enabled,
+                fts5CryptoEngineEnabled = enabled,
+                qrMultiDeviceSyncEnabled = enabled,
+                adaptiveP2pCodecEnabled = enabled,
+                dynamicPollingBatteryTimerEnabled = enabled,
+                blindGroupChannelsEnabled = enabled,
+                ephemeralMulticastRoomsEnabled = enabled,
+                p2pMessageDroppingEnabled = enabled,
+                distributedMediaShardingEnabled = enabled,
+                forkingThreadsEnabled = enabled
+            )
+            repository.updateSettings(updated)
+            viewModelScope.launch(Dispatchers.Main) {
+                showToast(if (enabled) "🟢 Единое P2P Ядро Primegram активировано! Слияние всех протоколов безопасности в общий туннель" else "🔴 Мульти-протокольное ядро Primegram отключено.")
             }
         }
     }
@@ -1029,6 +1114,24 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.deletePlugin(id)
             showToast("❌ Плагин успешно удален.")
+        }
+    }
+
+    fun sendStatusBarNotification(title: String, messageText: String) {
+        val context = getApplication<Application>()
+        try {
+            val notificationManager = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val notification = androidx.core.app.NotificationCompat.Builder(context, "primegram_p2p_channel")
+                .setSmallIcon(android.R.drawable.stat_notify_chat)
+                .setContentTitle(title)
+                .setContentText(messageText)
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .build()
+            
+            notificationManager.notify(System.currentTimeMillis().toInt(), notification)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 

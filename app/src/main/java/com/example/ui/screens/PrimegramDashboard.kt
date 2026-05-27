@@ -539,215 +539,672 @@ fun ChatConversationScreen(
 ) {
     val messages by viewModel.currentChatMessages.collectAsState()
     val isTyping by viewModel.isBotTyping.collectAsState()
+    
+    val partnerBatteryMap by viewModel.partnerBatteryLevel.collectAsState()
+    val knockUnlockedMap by viewModel.knockUnlocked.collectAsState()
+    val revealedSchrodingerMap by viewModel.revealedSchrodingerMessages.collectAsState()
+
+    val partnerBattery = partnerBatteryMap[chatId] ?: 12
+    val isChatKnockUnlocked = knockUnlockedMap[chatId] ?: false
+
     var inputMessageText by remember { mutableStateOf("") }
+    var sendAsSchrodinger by remember { mutableStateOf(false) }
+    var cinemaMeshExpanded by remember { mutableStateOf(false) }
+    var isMoviePlaying by remember { mutableStateOf(false) }
+    var simulatedTimeSeconds by remember { mutableStateOf(0) }
+    var knockClicksCount by remember { mutableStateOf(0) }
+
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
-    Column(modifier = modifier) {
-        // Chat History Frame
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
+    // Initialize partner battery level on first load to trigger low energy share scenario
+    LaunchedEffect(chatId) {
+        if (partnerBatteryMap[chatId] == null) {
+            viewModel.setPartnerBattery(chatId, 12)
+        }
+    }
+
+    LaunchedEffect(isMoviePlaying) {
+        if (isMoviePlaying) {
+            while (isMoviePlaying) {
+                kotlinx.coroutines.delay(1000)
+                simulatedTimeSeconds = (simulatedTimeSeconds + 1) % 180
+            }
+        }
+    }
+
+    if (!isChatKnockUnlocked) {
+        // 🔒 СТУК-КОД АНАЛОГОВАЯ ЗАЩИТА (KNOCK-CODE LOCK SCREEN OVERLAY)
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.98f))
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            items(messages) { message ->
-                val isMe = message.senderId == "me"
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = if (isMe) Alignment.End else Alignment.Start
-                ) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isMe) {
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                            }
-                        ),
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = if (isMe) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else Color.Transparent
-                        ),
-                        shape = RoundedCornerShape(
-                            topStart = 16.dp,
-                            topEnd = 16.dp,
-                            bottomStart = if (isMe) 16.dp else 4.dp,
-                            bottomEnd = if (isMe) 4.dp else 16.dp
-                        ),
-                        modifier = Modifier.widthIn(max = 280.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            if (message.isInterceptedDeleted) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(bottom = 6.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.OfflinePin,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.secondary,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Intercepted Log (Anti-Recall)",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.secondary,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
+            Icon(
+                imageVector = Icons.Default.Fingerprint,
+                contentDescription = null,
+                modifier = Modifier.size(80.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "СОКЕТ СЕССИИ ЗАШИФРОВАН",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Децентрализованный канал требует воспроизведения ритма физического стук-кода (Knock-Code) для инжекции ключей Ed25519 в RAM.",
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-                            if (message.isOneTimeMedia) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(140.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(
-                                            Brush.verticalGradient(
-                                                colors = listOf(
-                                                    MaterialTheme.colorScheme.secondary,
-                                                    MaterialTheme.colorScheme.background
-                                                )
-                                            )
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Icon(
-                                            Icons.Default.HideImage,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(36.dp)
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            text = "Media Saver Intercept Block",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                            }
+            Spacer(modifier = Modifier.height(24.dp))
 
-                            Text(
-                                text = message.text,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
+            // Rhythmic Interactive Knock Button
+            Button(
+                onClick = {
+                    knockClicksCount++
+                    // Trigger dynamic vibration on actual tap
+                    val vibrator = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                    vibrator?.vibrate(60)
+                    
+                    if (knockClicksCount >= 3) {
+                        viewModel.unlockChatWithKnock(chatId)
                     }
-                    Spacer(modifier = Modifier.height(2.dp))
+                },
+                modifier = Modifier
+                    .size(160.dp)
+                    .clip(CircleShape),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),
+                border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-                            .format(java.util.Date(message.timestamp)),
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        text = "СТУК-КОД 📡",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Нажмите 3 раза\nв ритме пульса",
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        fontSize = 10.sp
                     )
                 }
             }
 
-            if (isTyping) {
-                item {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
-                        Text(
-                            text = "печатает в зашифрованном канале...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Tap progress indicator
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                repeat(3) { index ->
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (knockClicksCount > index) MaterialTheme.colorScheme.primary 
+                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                            )
+                            .border(1.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                    )
                 }
             }
         }
+    } else {
+        // MAIN DECRYPTED CONVERSATION VIEW
+        Column(modifier = modifier) {
+            
+            // 📡 ТАКТИЧЕСКИЙ ХЕДЕР ПАНЕЛИ P2P (Unified Protocol Status Bar)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                ),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+            ) {
+                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (partnerBattery > 15) Color.Green else Color.Red)
+                            )
+                            Text(
+                                text = "P2P Линк: Активен (Onion • CRDT • UDP • Sub-Ratchet)",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
 
-        // Diagnostic / Deletion Testing Toolbar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Тест модулей:",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            AssistChip(
-                onClick = { viewModel.simulateDeletedMessageTrigger() },
-                label = { Text("Удалить ответ") },
-                leadingIcon = {
-                    Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(14.dp))
-                }
-            )
-            AssistChip(
-                onClick = { viewModel.sendOneTimeMedia(chatId) },
-                label = { Text("Одноразовое фото") },
-                leadingIcon = {
-                    Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(14.dp))
-                }
-            )
-        }
+                        // Cinema Mesh Toggle Button
+                        IconButton(
+                            onClick = { cinemaMeshExpanded = !cinemaMeshExpanded },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (cinemaMeshExpanded) Icons.Default.Movie else Icons.Default.Movie,
+                                contentDescription = "Cinema Mesh",
+                                tint = if (cinemaMeshExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
 
-        // Input Messaging bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedTextField(
-                value = inputMessageText,
-                onValueChange = { inputMessageText = it },
-                placeholder = { Text("Напишите сообщение...") },
+                    // Proximity indicators block
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "⚙️ Радар: 3 соседа рядом • Буфер RAM без следов",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        // Companion Battery Sharing Info
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "🔋 Собеседник: $partnerBattery%",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (partnerBattery > 15) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                            )
+                            if (partnerBattery <= 15) {
+                                Button(
+                                    onClick = { viewModel.chargePartner(chatId) },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = Color.Black
+                                    ),
+                                    shape = RoundedCornerShape(4.dp),
+                                    modifier = Modifier.height(20.dp)
+                                ) {
+                                    Text("Зарядить ⚡", fontSize = 9.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 🎬 WATCH TOGETHER (CINEMA-MESH SYNCHRONOUS PLAYER WIDGET)
+            if (cinemaMeshExpanded) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("🎬", fontSize = 16.sp)
+                                Text(
+                                    text = "Watch Together Offline (Cinema-Mesh)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                            // Close player button
+                            IconButton(onClick = { cinemaMeshExpanded = false }, modifier = Modifier.size(20.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.LightGray, modifier = Modifier.size(14.dp))
+                            }
+                        }
+
+                        // Simulated Screen Canvas
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(Color(0xFF0D47A1), Color.Black)
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                if (isMoviePlaying) {
+                                    Text(
+                                        text = "ИДЕТ СИНХРОННЫЙ ПРОСМОТР 🍿",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Green
+                                    )
+                                    Text(
+                                        text = "[Сноуден - 2016]",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.White.copy(alpha = 0.8f)
+                                    )
+                                    Text(
+                                        text = "Таймкод: ${simulatedTimeSeconds / 60}:${String.format("%02d", simulatedTimeSeconds % 60)} / 3:00",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 10.sp
+                                    )
+                                } else {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
+                                    Text(
+                                        text = "Cinema-Mesh Готов к запуску",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.Gray
+                                    )
+                                }
+                            }
+                        }
+
+                        // Playback Bar and Sync details
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            IconButton(
+                                onClick = { isMoviePlaying = !isMoviePlaying },
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = if (isMoviePlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = "Play/Pause",
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            // Loading Bar
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(Color.DarkGray)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(fraction = simulatedTimeSeconds / 180f)
+                                        .background(MaterialTheme.colorScheme.primary)
+                                )
+                            }
+
+                            Text(
+                                text = "Пинг: 4ms • Sync",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Green,
+                                fontSize = 9.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Chat History Frame
+            LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("chat_input_field"),
-                shape = RoundedCornerShape(24.dp),
-                maxLines = 4,
-                singleLine = false,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                )
-            )
-
-            IconButton(
-                onClick = {
-                    if (inputMessageText.isNotBlank()) {
-                        viewModel.sendMessage(chatId, inputMessageText)
-                        inputMessageText = ""
-                    }
-                },
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
-                    .testTag("chat_send_btn")
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 12.dp)
             ) {
-                Icon(
-                    Icons.Default.Send,
-                    contentDescription = "Отправить",
-                    tint = Color.Black
+                items(messages) { message ->
+                    val isMe = message.senderId == "me"
+                    val isSchrodinger = message.text.contains("[Шредингер]")
+                    val isRevealed = revealedSchrodingerMap[message.id] ?: false
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = if (isMe) Alignment.End else Alignment.Start
+                    ) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isMe) {
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                }
+                            ),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = if (isMe) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) 
+                                        else if (isSchrodinger && !isRevealed) MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)
+                                        else Color.Transparent
+                            ),
+                            shape = RoundedCornerShape(
+                                topStart = 16.dp,
+                                topEnd = 16.dp,
+                                bottomStart = if (isMe) 16.dp else 4.dp,
+                                bottomEnd = if (isMe) 4.dp else 16.dp
+                            ),
+                            modifier = Modifier.widthIn(max = 280.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                if (message.isInterceptedDeleted) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(bottom = 6.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.OfflinePin,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Intercepted Log (Anti-Recall)",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.secondary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                if (message.isOneTimeMedia) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(140.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    colors = listOf(
+                                                        MaterialTheme.colorScheme.secondary,
+                                                        MaterialTheme.colorScheme.background
+                                                    )
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Icon(
+                                                Icons.Default.HideImage,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(36.dp)
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = "Media Saver Intercept Block",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+
+                                // Handle Schrödinger Blurred Mode
+                                if (isSchrodinger && !isRevealed) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { viewModel.toggleSchrodingerReveal(message.id) }
+                                            .padding(vertical = 4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Icon(
+                                            Icons.Default.VisibilityOff,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = "📦 КВАНТОВОЕ СООБЩЕНИЕ ШРЕДИНГЕРА",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Black,
+                                            color = MaterialTheme.colorScheme.secondary,
+                                            fontSize = 10.sp,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Text(
+                                            text = "[Нажмите для анонимной дешифрации]",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.Gray,
+                                            fontSize = 9.sp,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                } else {
+                                    // Normal or decrypted Schrödinger message
+                                    val renderedText = if (isSchrodinger) {
+                                        message.text.replace("[Шредингер]", "").trim()
+                                    } else {
+                                        message.text
+                                    }
+
+                                    Column {
+                                        if (isSchrodinger) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(bottom = 4.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "ДЕШИФРОВАНО • SECURE 🛡️",
+                                                        color = MaterialTheme.colorScheme.secondary,
+                                                        fontSize = 8.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        Text(
+                                            text = renderedText,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onBackground
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Timestamp and Tactile Morse Whisper Button
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(top = 2.dp)
+                        ) {
+                            Text(
+                                text = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                                    .format(java.util.Date(message.timestamp)),
+                                fontSize = 9.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                            
+                            // Vibro Whisper Button
+                            IconButton(
+                                onClick = {
+                                    // Trigger brief vibration Morse sequence
+                                    val vibrator = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                                    vibrator?.vibrate(longArrayOf(0, 150, 80, 150, 80, 300), -1)
+                                    viewModel.showToast("🔊 ТАКТИЛЬНЫЙ ШЕПОТ: Сообщение перекодировано в вибро-паттерн.")
+                                },
+                                modifier = Modifier.size(16.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FlashOn,
+                                    contentDescription = "Tactile Whisper",
+                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (isTyping) {
+                    item {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary)
+                            )
+                            Text(
+                                text = "печатает в зашифрованном канале...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Diagnostic / Deletion Testing Toolbar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Тест модулей:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
+                AssistChip(
+                    onClick = { viewModel.simulateDeletedMessageTrigger() },
+                    label = { Text("Удалить ответ") },
+                    leadingIcon = {
+                        Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(14.dp))
+                    }
+                )
+                AssistChip(
+                    onClick = { viewModel.sendOneTimeMedia(chatId) },
+                    label = { Text("Одноразовое фото") },
+                    leadingIcon = {
+                        Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(14.dp))
+                    }
+                )
+            }
+
+            // Input Messaging bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Schrödinger state selector
+                IconButton(
+                    onClick = { 
+                        sendAsSchrodinger = !sendAsSchrodinger
+                        viewModel.showToast(if (sendAsSchrodinger) "🧪 Режим Шредингера: Сообщения будут запечатаны в квантовую структуру!" else "Обычный режим отправки")
+                    },
+                    modifier = Modifier
+                        .background(
+                            if (sendAsSchrodinger) MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f) 
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            CircleShape
+                        )
+                        .size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Science,
+                        contentDescription = "Квантовый купол",
+                        tint = if (sendAsSchrodinger) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                OutlinedTextField(
+                    value = inputMessageText,
+                    onValueChange = { inputMessageText = it },
+                    placeholder = { 
+                        Text(if (sendAsSchrodinger) "Квантовое сообщение..." else "Напишите сообщение...") 
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("chat_input_field"),
+                    shape = RoundedCornerShape(24.dp),
+                    maxLines = 4,
+                    singleLine = false,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = if (sendAsSchrodinger) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                    )
+                )
+
+                IconButton(
+                    onClick = {
+                        if (inputMessageText.isNotBlank()) {
+                            val finalMsg = if (sendAsSchrodinger) "[Шредингер] $inputMessageText" else inputMessageText
+                            viewModel.sendMessage(chatId, finalMsg)
+                            inputMessageText = ""
+                        }
+                    },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(if (sendAsSchrodinger) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary)
+                        .testTag("chat_send_btn")
+                ) {
+                    Icon(
+                        Icons.Default.Send,
+                        contentDescription = "Отправить",
+                        tint = Color.Black
+                    )
+                }
             }
         }
     }
@@ -1194,6 +1651,32 @@ fun PluginsTab(
 ) {
     val plugins by viewModel.plugins.collectAsState()
 
+    // Form states for custom JS update creation
+    var customName by remember { mutableStateOf("") }
+    var customVersion by remember { mutableStateOf("v1.0") }
+    var customDesc by remember { mutableStateOf("") }
+    var customCode by remember { mutableStateOf("") }
+    var isFormExpanded by remember { mutableStateOf(false) }
+
+    // Predefined official JS updates
+    val officialUpdates = listOf(
+        Triple(
+            "Quantum Encryptor (v3.5)",
+            "Инжектирует дополнительный слой квантово-резистентного шифрования в каждый исходящий сокет для защиты от суперкомпьютеров ИИ.",
+            "function onSendMessage(msg) {\n    Primegram.showToast(\"🛡️ [JS Kernel v3.5] Инжектирован слой зашифрованного сокета!\");\n    return \"🔒 [Quantum-Secret] \" + msg;\n}"
+        ),
+        Triple(
+            "Core Spam-Firewall (v3.6)",
+            "Фильтрует входящий рекламный спам и акции на лету, подменяя текст предупреждением сетевого администратора ядра.",
+            "function onReceiveMessage(msg) {\n    if (msg.toLowerCase().includes(\"купить\") || msg.toLowerCase().includes(\"акция\") || msg.toLowerCase().includes(\"скидка\")) {\n        Primegram.showToast(\"🛑 [JS Firewall] Спам успешно нейтрализован!\");\n        return \"📥 [Сетевое ядро: Входящий рекламный блок заблокирован и дезинфицирован]\";\n    }\n    return msg;\n}"
+        ),
+        Triple(
+            "Crypto Shield Transliterator (v3.7)",
+            "Автоматически шифрует важные ключевые фразы (пароль, баг, секрет, TON) в безопасные крипто-символы для блокировки глубокого сканирования провайдером.",
+            "function onSendMessage(msg) {\n    return msg.replace(\"пароль\", \"🔑\").replace(\"баг\", \"🐛\").replace(\"секрет\", \"🤫\").replace(\"ton\", \"💎\");\n}"
+        )
+    )
+
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
@@ -1221,15 +1704,203 @@ fun PluginsTab(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Данные скрипты и хуки инжектируются в оригинальное соединение Telegram, изменяя поведение сервера и рендеринга.",
+                    text = "Данные скрипты и хуки инжектируются в оригинальное соединение Telegram, изменяя поведение сервера, фильтрацию и рендеринг.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
+        // JS Updates Center Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Динамические JS Обновления Ядра",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "Доступно обновлений: ${officialUpdates.size}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
+        }
+
+        // Official Updates section
+        officialUpdates.forEach { (nameAndVer, desc, code) ->
+            val nameOnly = nameAndVer.substringBefore(" (")
+            val verOnly = nameAndVer.substringAfter("(").substringBefore(")")
+            
+            // Check if already installed
+            val isInstalled = plugins.any { it.name == nameOnly }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+                ),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = "Доступное JS Обновление",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = nameOnly,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(text = verOnly, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Text(
+                        text = "Что добавилось в обновлении:\n$desc",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Button(
+                        onClick = {
+                            viewModel.addCustomPlugin(nameOnly, desc, verOnly, "JS Hot-Update", code)
+                        },
+                        enabled = !isInstalled,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(36.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text(
+                            text = if (isInstalled) "✅ Системное Обновление Применено" else "📥 Установить JS Обновление Ядра",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        // Custom JS hot patches form
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.1f)
+            ),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f))
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isFormExpanded = !isFormExpanded },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Code,
+                            contentDescription = "Custom JS code",
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Развернуть ручную установку JS скриптов",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Icon(
+                        imageVector = if (isFormExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Тумблер",
+                        tint = MaterialTheme.colorScheme.secondary
+                    )
+                }
+
+                if (isFormExpanded) {
+                    OutlinedTextField(
+                        value = customName,
+                        onValueChange = { customName = it },
+                        label = { Text("Название скрипта / мода") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = customVersion,
+                        onValueChange = { customVersion = it },
+                        label = { Text("Версия") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = customDesc,
+                        onValueChange = { customDesc = it },
+                        label = { Text("Описание изменений (Что нового)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = customCode,
+                        onValueChange = { customCode = it },
+                        label = { Text("Код JS обновления ядра") },
+                        placeholder = { Text("function onSendMessage(msg) {\n  return msg;\n}") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(140.dp),
+                        maxLines = 10
+                    )
+
+                    Button(
+                        onClick = {
+                            if (customName.isNotBlank() && customCode.isNotBlank()) {
+                                viewModel.addCustomPlugin(customName, customDesc, customVersion, "Custom User JS", customCode)
+                                customName = ""
+                                customDesc = ""
+                                customCode = ""
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Применить и заинжектить JS обновление", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         Text(
-            text = "Активные плагины модулей",
+            text = "Активные плагины и горячие моды",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Bold
@@ -1600,10 +2271,8 @@ fun SettingsTab(
             }
         }
 
-        // 🔒 ПАРАНОИДАЛЬНЫЙ ДИСпетчер БЕЗОПАСНОСТИ & АНОНИМНОСТИ
-        var anonymityExpanded by remember { mutableStateOf(false) }
-        var usabilityExpanded by remember { mutableStateOf(false) }
-        var chatsSpecExpanded by remember { mutableStateOf(false) }
+        // ⚡ ЕДИНОЕ МУЛЬТИПРОТОКОЛЬНОЕ P2P ЯДРО (CONSOLIDATED CORE ACTION)
+        val isCoreActive = activeSettings.onionRoutingEnabled
 
         Text(
             text = "Параметры безопасности (Режим Параноика)",
@@ -1613,287 +2282,131 @@ fun SettingsTab(
             modifier = Modifier.padding(top = 8.dp)
         )
 
-        // 1. АНОНИМНОСТЬ И БЕЗОПАСНОСТЬ CARD
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = if (anonymityExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                containerColor = if (isCoreActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.04f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             ),
             shape = RoundedCornerShape(16.dp),
-            border = if (anonymityExpanded) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)) else null
+            border = BorderStroke(1.5.dp, if (isCoreActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { anonymityExpanded = !anonymityExpanded },
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Text("🔒", style = MaterialTheme.typography.titleMedium)
+                        Text("⚡", style = MaterialTheme.typography.titleMedium)
                         Column {
                             Text(
-                                text = "Анонимность и Безопасность",
+                                text = "Единый P2P-Протокол Слияния",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Onion-микширование, Anti-Frida, Dead Man Switch...",
+                                text = "Совмещение всех 10 автономных систем в единый поток",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
-                    Icon(
-                        imageVector = if (anonymityExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = "Expand",
-                        tint = MaterialTheme.colorScheme.primary
+                    Switch(
+                        checked = isCoreActive,
+                        onCheckedChange = { viewModel.toggleAllCoreFeatures(it) }
                     )
                 }
 
-                if (anonymityExpanded) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-                    Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
 
-                    // Onion Routing
-                    ParanoidFeatureRow(
-                        title = "Мета-микширование (Tor Onion Routing)",
-                        description = "Нарезает сообщение на равные блоки и упаковывает в несколько слоев Tor-подобного шифрования через 3 промежуточных пира.",
-                        iconEmoji = "🧅",
-                        checked = activeSettings.onionRoutingEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("onionRouting", it) }
-                    )
-
-                    // Anti-Frida
-                    ParanoidFeatureRow(
-                        title = "Защита ядра от отладки (Anti-Frida)",
-                        description = "Запускает C++ NDK проверку оперативной памяти на следы Frida, Xposed и отладчиков при каждом сетевом обмене.",
-                        iconEmoji = "🛡️",
-                        checked = activeSettings.antiFridaEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("antiFrida", it) }
-                    )
-
-                    // Memory Shredder
-                    ParanoidFeatureRow(
-                        title = "Военный \"Шредер\" памяти (Zero-Trace)",
-                        description = "Физически стирает ОЗУ и блоки хранилища при удалении чатов, забивая секторы случайными байтами в 3 прохода.",
-                        iconEmoji = "📟",
-                        checked = activeSettings.zeroTraceMemoryShredderEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("memoryShredder", it) }
-                    )
-
-                    // Ed25519 login
-                    ParanoidFeatureRow(
-                        title = "Identity-Free вход (Ed25519 хэш)",
-                        description = "Никаких телефонных номеров или почты. Отпечаток пары Ed25519 ключей служит вашим уникальным адресом в сети.",
-                        iconEmoji = "🔑",
-                        checked = activeSettings.ed25519HashLoginEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("ed25519", it) }
-                    )
-
-                    // Dead man switch
-                    ParanoidFeatureRow(
-                        title = "Канарейка мертвеца (Dead Man's Switch)",
-                        description = "Автоматический таймер самоликвидации: стирает все базы данных и ключи, если вы не вводили пароль более 72 часов.",
-                        iconEmoji = "⏳",
-                        checked = activeSettings.deadMansSwitchEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("deadMansSwitch", it) }
-                    )
-                }
-            }
-        }
-
-        // 2. УДОБСТВО И ЮЗАБИЛИТИ CARD
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (usabilityExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-            ),
-            shape = RoundedCornerShape(16.dp),
-            border = if (usabilityExpanded) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)) else null
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
+                // Terminal Simulation Console Card
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { usabilityExpanded = !usabilityExpanded },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.Black.copy(alpha = 0.85f))
+                        .padding(10.dp)
                 ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isCoreActive) Color.Green else Color.Red)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isCoreActive) "STATUS: CORE ACTIVE • MULTICAST TUNNEL ONLINE" else "STATUS: STANDBY • LOCAL CLIENT ONLY",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isCoreActive) Color.Green else Color.Gray,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp
+                            )
+                        }
+                        Text(
+                            text = if (isCoreActive) 
+                                ">> [DHT] Listening on 254.0.0.1:4139\n>> [Wifi P2P] Discovery active • Broadcaster online\n>> [Sub-Ratchet] Active Keys generated (Ed25519)\n>> [Sharding-V2] 128-bit chunking table verified"
+                                else ">> [DHT] Engine offline\n>> [Tor onion] Tunnel dormant\n>> TABS CONSOLIDATED INTO ONE SEAMLESS PROTOCOL",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isCoreActive) Color.Green.copy(alpha = 0.8f) else Color.Gray,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Интегрированные протоколы связи в активной сессии:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                // Sub-Features list
+                val subProtocols = listOf(
+                    "🧅 Tor Onion Routing" to "Мета-микширование пакетов через 3 анонимных пира",
+                    "📶 Wi-Fi Hotspot Mesh" to "Сквозная раздача трафика и карт в офлайн-зонах без LTE",
+                    "👥 CRDT Blind Channels" to "Слепые группы: никто не знает участников, кроме своих соседей",
+                    "👻 UDP Multicast Rooms" to "Комнаты-призраки: переписка пишется только в сверхбыстрое ОЗУ",
+                    "✉️ P2P Message Dropping" to "Офлайн-транзит сообщений через попутные онлайн-ноды",
+                    "💿 Distributed Torrent Sharding" to "Нарезка тяжелых файлов на 100 шардов для распределенного кэша",
+                    "🧵 Sub-Ratchet Cryptography" to "Каждая ветка чата имеет автономное дерево ключей хранилища",
+                    "🛡️ NDK Anti-Frida Sentinel" to "Непрерывная верификация памяти на перехватчики ядра",
+                    "🔍 Bio FTS5 Crypto-Search" to "Криптографический мгновенный поиск по зашифрованной базе"
+                )
+
+                subProtocols.forEach { (title, desc) ->
                     Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text("🛠", style = MaterialTheme.typography.titleMedium)
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(if (isCoreActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                        )
                         Column {
                             Text(
-                                text = "Удобство и Юзабилити",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
+                                text = title,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isCoreActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Wi-Fi Hotspot Мост, FTS5 Крипто-поиск, QR линки...",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = desc,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
                             )
                         }
                     }
-                    Icon(
-                        imageVector = if (usabilityExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = "Expand",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                if (usabilityExpanded) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Hotspot Mesh
-                    ParanoidFeatureRow(
-                        title = "Автономный Wi-Fi/LTE Мост (Hotspot Mesh)",
-                        description = "Один пир с мобильной связью может раздать анонимную зашифрованную Wi-Fi точку остальным пирам в офлайн-зоне.",
-                        iconEmoji = "⚡",
-                        checked = activeSettings.hotspotMeshBridgeEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("hotspotMesh", it) }
-                    )
-
-                    // FTS5 Crypto
-                    ParanoidFeatureRow(
-                        title = "Крипто-поиск по биометрии (FTS5)",
-                        description = "Полнотекстовый поиск SQLite FTS5, база данных которого децентрализованно шифруется на лету вашим отпечатком.",
-                        iconEmoji = "🔍",
-                        checked = activeSettings.fts5CryptoEngineEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("fts5Crypto", it) }
-                    )
-
-                    // QR Sync
-                    ParanoidFeatureRow(
-                        title = "QR Мульти-девайс синхронизация",
-                        description = "Быстрый перенос истории чатов и активных сокетов на другие устройства по локальной сети через одноразовый сейв-QR.",
-                        iconEmoji = "📲",
-                        checked = activeSettings.qrMultiDeviceSyncEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("qrSync", it) }
-                    )
-
-                    // Adaptive Codec
-                    ParanoidFeatureRow(
-                        title = "Адаптивный H.256 P2P кодек",
-                        description = "Анализирует сетевой пинг и динамически сжимает пересылаемый видеопоток под пропускной лимит локального Mesh линка.",
-                        iconEmoji = "🎬",
-                        checked = activeSettings.adaptiveP2pCodecEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("adaptiveCodec", it) }
-                    )
-
-                    // Battery saver dynamic polling
-                    ParanoidFeatureRow(
-                        title = "Смарт-таймер Dynamic Polling",
-                        description = "Снижает частоту опроса распределенной сети DHT до 10 минут, если гироскоп фиксирует отсутствие движения, экономя ресурс ОЗУ.",
-                        iconEmoji = "🔋",
-                        checked = activeSettings.dynamicPollingBatteryTimerEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("dynamicPolling", it) }
-                    )
-                }
-            }
-        }
-
-        // 3. ФУНКЦИИ ДЛЯ ЧАТОВ CARD
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (chatsSpecExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-            ),
-            shape = RoundedCornerShape(16.dp),
-            border = if (chatsSpecExpanded) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)) else null
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { chatsSpecExpanded = !chatsSpecExpanded },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text("💬", style = MaterialTheme.typography.titleMedium)
-                        Column {
-                            Text(
-                                text = "Специальные Свойства Чата",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Слепые каналы, Комнаты-призраки, Sharding...",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Icon(
-                        imageVector = if (chatsSpecExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = "Expand",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                if (chatsSpecExpanded) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Blind Channels
-                    ParanoidFeatureRow(
-                        title = "\"Слепые\" групповые CRDT каналы",
-                        description = "Децентрализованный групповой чат, где участники не знают полный список группы, а видят лишь соседние ноды пересылки.",
-                        iconEmoji = "👥",
-                        checked = activeSettings.blindGroupChannelsEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("blindChannels", it) }
-                    )
-
-                    // Ephemeral rooms (multicast UDP rooms)
-                    ParanoidFeatureRow(
-                        title = "Комнаты-призраки (UDP Multicast)",
-                        description = "Локальные чаты по мультикасту, записывающиеся только в сверхоперативное ОЗУ (RAM) и исчезающие бесследно при выходе.",
-                        iconEmoji = "👻",
-                        checked = activeSettings.ephemeralMulticastRoomsEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("ephemeralRooms", it) }
-                    )
-
-                    // Message Dropping
-                    ParanoidFeatureRow(
-                        title = "Оффлайн-почтальон (P2P Dropping)",
-                        description = "Позволяет зашифровать сообщение и оставить его на временное транзитное хранение у онлайн-нод, если получатель вне сети.",
-                        iconEmoji = "✉️",
-                        checked = activeSettings.p2pMessageDroppingEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("messageDropping", it) }
-                    )
-
-                    // Media sharding
-                    ParanoidFeatureRow(
-                        title = "Фрагментированное хранилище (Media Sharding)",
-                        description = "Разбивает отправляемые тяжелые медиа на 100 зашифрованных кусочков (шардов) для параллельной раздачи по принципу Торрента.",
-                        iconEmoji = "💿",
-                        checked = activeSettings.distributedMediaShardingEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("mediaSharding", it) }
-                    )
-
-                    // Forking threads (sub-ratchet threads)
-                    ParanoidFeatureRow(
-                        title = "Криптографические ветки Sub-Ratchet",
-                        description = "Режим создания локального суб-древа ответов со своим обособленным ключом шифрования внутри родительской сессии.",
-                        iconEmoji = "🧵",
-                        checked = activeSettings.forkingThreadsEnabled,
-                        onCheckedChange = { viewModel.toggleSecurityFeature("forkingThreads", it) }
-                    )
                 }
             }
         }
