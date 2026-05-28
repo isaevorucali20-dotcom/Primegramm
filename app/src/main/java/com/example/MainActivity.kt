@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.example.ui.PrimeViewModel
 import com.example.ui.screens.PrimegramDashboard
 import com.example.ui.theme.PrimegramTheme
@@ -25,9 +27,12 @@ class MainActivity : ComponentActivity() {
             requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
         }
         setContent {
-            PrimegramTheme {
+            val viewModel: PrimeViewModel = viewModel()
+            val settingsState by viewModel.settings.collectAsState()
+            val themeName = settingsState?.selectedTheme ?: "Dark Cosmic Slate"
+            
+            PrimegramTheme(themeName = themeName) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    val viewModel: PrimeViewModel = viewModel()
                     PrimegramDashboard(viewModel = viewModel)
                 }
             }

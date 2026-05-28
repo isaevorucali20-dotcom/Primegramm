@@ -88,20 +88,16 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         _partnerBatteryLevel.value = _partnerBatteryLevel.value + (chatId to newLevel)
         
         viewModelScope.launch(Dispatchers.IO) {
-            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
-            val newBalance = current.starsBalance + 15
-            repository.updateSettings(current.copy(starsBalance = newBalance))
-            
             repository.insertMessage(
                 MessageEntity(
                     chatId = chatId,
                     senderId = "system",
-                    text = "🔌 Жест взаимной поддержки: Передача заряда по OTG-кабелю зафиксирована! Начислено +15 звезд за поддержку живучести P2P-узла. Карма сети повысилась."
+                    text = "🔌 Жест взаимной поддержки: Передача заряда по OTG-кабелю зафиксирована! Карма P2P-узла повысилась."
                 )
             )
             
             viewModelScope.launch(Dispatchers.Main) {
-                showToast("⚡ Заряд передан! Собеседник заряжен до $newLevel%. Вы получили +15 звезд!")
+                showToast("⚡ Заряд передан! Собеседник заряжен до $newLevel%. Карма сети +1!")
             }
         }
     }
@@ -139,42 +135,24 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         if (existingUsers.isEmpty()) {
             val devUser = ChatUserEntity(
                 id = "prime41k",
-                displayName = "Святослав Prime",
+                displayName = "Святослав Prime (Тестировка)",
                 username = "@developer_prime",
-                bio = "Разработчик ядра Primegram. Пишите по любым багам и предложениям 🛡️",
+                bio = "Разработчик ядра Primegram. Бета-тестирование защищенного чата Primegram. 🛰️🛡️",
                 isBot = false,
                 avatarColor = 0xFFE040FB, // Vibrant magenta
                 neonGlowColor = "Neon Pink",
-                spentStars = 250
-            )
-            val supportBot = ChatUserEntity(
-                id = "prime_gpt_bot",
-                displayName = "Prime Secure AI",
-                username = "@prime_gpt_bot",
-                bio = "Защищенный локальный ассистент на базе модели Gemini.",
-                isBot = true,
-                avatarColor = 0xFF00E5FF, // Neon cyan
-                neonGlowColor = "Neon Cyan"
+                spentStars = 250,
+                profileSongsJson = """[{"title":"No Cure","artist":"Lorn"},{"title":"Cyberpunk Melody","artist":"Sub Zero"},{"title":"Midnight City","artist":"M83"}]"""
             )
             repository.insertOrUpdateChatUser(devUser)
-            repository.insertOrUpdateChatUser(supportBot)
 
-            // Insert initial welcome messages
+            // Insert initial welcome message from test developer
             repository.insertMessage(
                 MessageEntity(
                     chatId = "prime41k",
                     senderId = "prime41k",
-                    text = "Привет! Добро пожаловать в Primegram — защищенный модифицированный Telegram-клиент нового поколения. 🚀\n\nЗдесь все сообщения шифруются локально, а плагины Anti-Recall Pro и Media Saver перехватывают любые удаленные данные и одноразовые фото.",
+                    text = "Привет! Добро пожаловать во фреймворк Primegram — защищенный клиент нового поколения. 🚀\n\nЭтот диалог подписан как 'Тестировка'. Все сообщения шифруются на лету. Попробуйте написать мне, изменить плагины в меню, или заглянуть в мой плейлист в профиле диалога!",
                     timestamp = System.currentTimeMillis() - 60000
-                )
-            )
-
-            repository.insertMessage(
-                MessageEntity(
-                    chatId = "prime_gpt_bot",
-                    senderId = "prime_gpt_bot",
-                    text = "Приветствую! Я защищенный AI ассистент Primegram. Будьте уверены: наши диалоги шифруются сквозным методом по стандарту AES-256-GCM. 🛡️\n\nЗадайте мне любой вопрос!",
-                    timestamp = System.currentTimeMillis() - 50000
                 )
             )
         }
@@ -696,18 +674,14 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             val user = repository.getChatUserDirect(partnerId) ?: return@launch
 
             if (currentSettings.starsBalance < cost) {
-                val roundedGap = cost - currentSettings.starsBalance
-                val refilledSettings = currentSettings.copy(
-                    starsBalance = 15000 // Refill balance automatically on purchase
-                )
-                repository.updateSettings(refilledSettings)
-                showToast("Автоматически приобретено +$roundedGap звёзд для подарка! 🌟")
-                delay(300)
+                viewModelScope.launch(Dispatchers.Main) {
+                    showToast("⚠️ Недостаточно звёзд! Общайтесь больше, чтобы заработать (+5 звёзд за ответ в чате) 💬")
+                }
+                return@launch
             }
 
             // Deduct from Balance, Add to Partner
-            val updatedSettings = repository.getSettingsDirect() ?: PrimeSettingsEntity()
-            repository.updateSettings(updatedSettings.copy(starsBalance = updatedSettings.starsBalance - cost))
+            repository.updateSettings(currentSettings.copy(starsBalance = currentSettings.starsBalance - cost))
             repository.insertOrUpdateChatUser(user.copy(spentStars = user.spentStars + cost))
 
             // Insert system message for gift transaction
@@ -720,10 +694,12 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                 )
             )
 
-            showToast("Подарок '$giftName' успешно отправлен! 🏆")
+            viewModelScope.launch(Dispatchers.Main) {
+                showToast("Подарок '$giftName' отправлен! Награда зачислена в профиль собеседника 🏆")
+            }
 
             delay(1200)
-            val replyText = "Ого! Спасибо за $giftName! Мой звездный статус вырос на +$cost звёзд! 💖🛡️"
+            val replyText = "Ого! Спасибо за $giftName! Мой рейтинг признания вырос на +$cost пунктов! 💖🎖️"
             repository.insertMessage(
                 MessageEntity(
                     chatId = partnerId,
@@ -736,9 +712,9 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun purchaseStars(amount: Int) {
         viewModelScope.launch(Dispatchers.IO) {
-            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
-            repository.updateSettings(current.copy(starsBalance = current.starsBalance + amount))
-            showToast("Приобретено $amount звёзд в Primegram! 🌟")
+            viewModelScope.launch(Dispatchers.Main) {
+                showToast("🔒 Легкая покупка заблокирована в релизе! Звёзды теперь зарабатываются только общением (+5 звезд за ответы).")
+            }
         }
     }
 
@@ -1056,12 +1032,46 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun parseAndRunKotlinGoPlugins(originalText: String, activePlugins: List<PluginEntity>): String {
+        var text = originalText
+        try {
+            for (plugin in activePlugins) {
+                val code = plugin.scriptCode ?: ""
+                val type = plugin.type ?: ""
+                if (type.contains("Kotlin", ignoreCase = true) || type.contains("Go", ignoreCase = true) || code.contains(".replace") || code.contains("Replace")) {
+                    // Match .replace("old", "new") in Kotlin
+                    val regex = """\.replace\(\s*"([^"]*)"\s*,\s*"([^"]*)"\s*\)""".toRegex()
+                    var matchResult = regex.find(code)
+                    while (matchResult != null) {
+                        val oldStr = matchResult.groupValues[1]
+                        val newStr = matchResult.groupValues[2]
+                        text = text.replace(oldStr, newStr)
+                        matchResult = matchResult.next()
+                    }
+                    
+                    // Match strings.ReplaceAll(msg, "old", "new") in Go
+                    val goRegex = """strings\.ReplaceAll\(\s*\w+\s*,\s*"([^"]*)"\s*,\s*"([^"]*)"\s*\)""".toRegex()
+                    var goMatchResult = goRegex.find(code)
+                    while (goMatchResult != null) {
+                        val oldStr = goMatchResult.groupValues[1]
+                        val newStr = goMatchResult.groupValues[2]
+                        text = text.replace(oldStr, newStr)
+                        goMatchResult = goMatchResult.next()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return text
+    }
+
     fun runJsHookSend(originalText: String, onComplete: (String) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             val activePlugins = repository.plugins.first().filter { it.isEnabled }
-            var currentText = originalText
+            var currentText = parseAndRunKotlinGoPlugins(originalText, activePlugins)
             for (plugin in activePlugins) {
-                if (plugin.scriptCode.isNotEmpty()) {
+                if (plugin.scriptCode.isNotEmpty() && !plugin.type.contains("Kotlin") && !plugin.type.contains("Go")) {
                     val processed = executeJsCodeInWebView(plugin.scriptCode, "onSendMessage", currentText)
                     if (processed != null) {
                         currentText = processed
@@ -1077,9 +1087,9 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
     fun runJsHookReceive(originalText: String, onComplete: (String) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             val activePlugins = repository.plugins.first().filter { it.isEnabled }
-            var currentText = originalText
+            var currentText = parseAndRunKotlinGoPlugins(originalText, activePlugins)
             for (plugin in activePlugins) {
-                if (plugin.scriptCode.isNotEmpty()) {
+                if (plugin.scriptCode.isNotEmpty() && !plugin.type.contains("Kotlin") && !plugin.type.contains("Go")) {
                     val processed = executeJsCodeInWebView(plugin.scriptCode, "onReceiveMessage", currentText)
                     if (processed != null) {
                         currentText = processed
@@ -1146,8 +1156,8 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         // Initialize 4 beautifully simulated realistic nearby people in space 
         nearbyPeers.value = listOf(
             NearbyPeer(
-                id = "metro_music_dj",
-                name = "Алексей (Метро Диджей)",
+                id = "prime_music_dj",
+                name = "Алексей (Primegram DJ)",
                 avatarColor = 0xFF4CAF50,
                 distanceMeters = 8,
                 currentTrack = "Танцуйте",
@@ -1388,6 +1398,112 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             repository.insertMessage(companionReply)
             awardStarsForReply(5)
             sendStatusBarNotification("Ответ близости", "Ваш собеседник ответил на важные слова!")
+        }
+    }
+
+    fun addSongToOwnProfile(title: String, artist: String) {
+        if (title.isBlank() || artist.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            val existingJson = current.profileSongsJson
+            val array = try {
+                org.json.JSONArray(existingJson)
+            } catch (e: Exception) {
+                org.json.JSONArray()
+            }
+            
+            val newObj = org.json.JSONObject().apply {
+                put("title", title)
+                put("artist", artist)
+            }
+            array.put(newObj)
+            
+            val updated = current.copy(profileSongsJson = array.toString())
+            repository.updateSettings(updated)
+            viewModelScope.launch(Dispatchers.Main) {
+                showToast("🎵 Песня '$title' добавлена в ваш профиль!")
+            }
+        }
+    }
+
+    fun removeSongFromOwnProfile(title: String, artist: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            val existingJson = current.profileSongsJson
+            val array = try {
+                org.json.JSONArray(existingJson)
+            } catch (e: Exception) {
+                org.json.JSONArray()
+            }
+            
+            val newArray = org.json.JSONArray()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val t = obj.optString("title")
+                val a = obj.optString("artist")
+                if (t != title || a != artist) {
+                    newArray.put(obj)
+                }
+            }
+            
+            val updated = current.copy(profileSongsJson = newArray.toString())
+            repository.updateSettings(updated)
+            viewModelScope.launch(Dispatchers.Main) {
+                showToast("🗑️ Песня удалена из вашего профиля.")
+            }
+        }
+    }
+
+    fun addSongToCompanionProfile(chatId: String, title: String, artist: String) {
+        if (title.isBlank() || artist.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val companion = repository.getChatUserDirect(chatId) ?: return@launch
+            val existingJson = companion.profileSongsJson
+            val array = try {
+                org.json.JSONArray(existingJson)
+            } catch (e: Exception) {
+                org.json.JSONArray()
+            }
+            
+            val newObj = org.json.JSONObject().apply {
+                put("title", title)
+                put("artist", artist)
+            }
+            array.put(newObj)
+            
+            val updated = companion.copy(profileSongsJson = array.toString())
+            repository.insertOrUpdateChatUser(updated)
+            viewModelScope.launch(Dispatchers.Main) {
+                showToast("🎵 Песня '$title' добавлена в плейлист собеседника!")
+            }
+        }
+    }
+
+    fun removeSongFromCompanionProfile(chatId: String, title: String, artist: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val companion = repository.getChatUserDirect(chatId) ?: return@launch
+            val existingJson = companion.profileSongsJson
+            val array = try {
+                org.json.JSONArray(existingJson)
+            } catch (e: Exception) {
+                org.json.JSONArray()
+            }
+            
+            val newArray = org.json.JSONArray()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val t = obj.optString("title")
+                val a = obj.optString("artist")
+                if (t != title || a != artist) {
+                    newArray.put(obj)
+                }
+            }
+            
+            val updated = companion.copy(profileSongsJson = newArray.toString())
+            repository.insertOrUpdateChatUser(updated)
+            viewModelScope.launch(Dispatchers.Main) {
+                showToast("🗑️ Песня удалена из профиля собеседника.")
+            }
         }
     }
 

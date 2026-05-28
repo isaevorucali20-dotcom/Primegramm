@@ -44,7 +44,8 @@ data class PrimeSettingsEntity(
     val ephemeralMulticastRoomsEnabled: Boolean = false,
     val p2pMessageDroppingEnabled: Boolean = false,
     val distributedMediaShardingEnabled: Boolean = false,
-    val forkingThreadsEnabled: Boolean = false
+    val forkingThreadsEnabled: Boolean = false,
+    val profileSongsJson: String = "[]" // JSON representation of user's personal songs/playlist
 )
 
 @Entity(tableName = "chat_users_table")
@@ -58,7 +59,8 @@ data class ChatUserEntity(
     val neonGlowColor: String? = null,
     val spentStars: Int = 0,
     val botToken: String? = null,
-    val botScript: String? = null
+    val botScript: String? = null,
+    val profileSongsJson: String = "[]" // JSON representation of personal songs/playlist
 )
 
 @Entity(tableName = "messages_table")

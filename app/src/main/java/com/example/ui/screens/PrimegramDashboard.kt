@@ -27,6 +27,10 @@ import androidx.compose.ui.unit.sp
 import com.example.data.*
 import com.example.ui.PrimeViewModel
 import kotlinx.coroutines.launch
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import android.provider.OpenableColumns
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +63,7 @@ fun PrimegramDashboard(viewModel: PrimeViewModel) {
     var showAddProxyDialog by remember { mutableStateOf(false) }
     var showAddMiniAppDialog by remember { mutableStateOf(false) }
     var showAddPluginDialog by remember { mutableStateOf(false) }
+    var showMyProfileDialog by remember { mutableStateOf(false) }
     var activeMiniAppUrl by remember { mutableStateOf<String?>(null) }
     var activeMiniAppName by remember { mutableStateOf("") }
 
@@ -86,6 +91,10 @@ fun PrimegramDashboard(viewModel: PrimeViewModel) {
                                 )
                             )
                         )
+                        .clickable {
+                            showMyProfileDialog = true
+                            scope.launch { drawerState.close() }
+                        }
                         .padding(24.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -132,7 +141,6 @@ fun PrimegramDashboard(viewModel: PrimeViewModel) {
                 // Navigation Items
                 val menuItems = listOf(
                     Triple("chats", "Диалоги", Icons.Default.Chat),
-                    Triple("alive", "Эфир (Alive Playlist)", Icons.Default.MusicNote),
                     Triple("proxy", "Управление Прокси", Icons.Default.VpnLock),
                     Triple("plugins", "Плагины (Mods)", Icons.Default.Extension),
                     Triple("miniapps", "Мини-Приложения", Icons.Default.Apps),
@@ -201,7 +209,7 @@ fun PrimegramDashboard(viewModel: PrimeViewModel) {
                                     "proxy" -> "Модем & Прокси"
                                     "plugins" -> "Внедрение модов"
                                     "miniapps" -> "Мини-Апп игры"
-                                    "settings" -> "Identity & Ядро"
+                                    "settings" -> "Параметры Primegram"
                                     else -> "Primegram"
                                 },
                                 style = MaterialTheme.typography.titleLarge,
@@ -297,7 +305,6 @@ fun PrimegramDashboard(viewModel: PrimeViewModel) {
                         }
                     }
                     "proxy" -> ProxyTab(viewModel = viewModel, modifier = Modifier.fillMaxSize())
-                    "alive" -> AlivePlaylistTab(viewModel = viewModel, modifier = Modifier.fillMaxSize())
                     "plugins" -> PluginsTab(viewModel = viewModel, modifier = Modifier.fillMaxSize())
                     "miniapps" -> MiniAppsTab(
                         viewModel = viewModel,
@@ -330,6 +337,13 @@ fun PrimegramDashboard(viewModel: PrimeViewModel) {
             viewModel = viewModel,
             partnerId = activeChatId!!,
             onDismiss = { showPartnerProfileDialog = false }
+        )
+    }
+
+    if (showMyProfileDialog) {
+        MyProfileDialog(
+            viewModel = viewModel,
+            onDismiss = { showMyProfileDialog = false }
         )
     }
 
@@ -561,6 +575,10 @@ fun ChatConversationScreen(
     var relationStats by remember { mutableStateOf<com.example.ui.RelationStats?>(null) }
     var voiceRecordSeconds by remember { mutableStateOf(0) }
     var isVoiceRecordingActive by remember { mutableStateOf(false) }
+    var showAttachmentDialog by remember { mutableStateOf(false) }
+    val downloadedFilesState = remember { mutableStateMapOf<String, Float>() }
+    val activePlayingMedia = remember { mutableStateMapOf<String, Boolean>() }
+    val playingPositions = remember { mutableStateMapOf<String, Float>() }
 
     LaunchedEffect(chatId, messages) {
         relationStats = viewModel.calculateRelationStats(chatId)
@@ -1358,11 +1376,194 @@ fun ChatConversationScreen(
                                                 }
                                             }
                                         }
-                                        Text(
-                                            text = renderedText,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onBackground
-                                        )
+                                        if (renderedText.startsWith("[File:")) {
+                                            val parts = renderedText.replace("[File:", "").replace("]", "").trim().split("(")
+                                            val fileName = parts.firstOrNull()?.trim() ?: "unknown_file"
+                                            val fileSize = if (parts.size > 1) parts[1].replace(")", "").trim() else "unknown size"
+                                            
+                                            val downloadProgress = downloadedFilesState[message.id.toString()]
+                                            
+                                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Description,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.size(32.dp)
+                                                    )
+                                                    Column {
+                                                        Text(
+                                                            text = fileName,
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onBackground
+                                                        )
+                                                        Text(
+                                                            text = "Шаринг P2P • $fileSize",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = Color.Gray,
+                                                            fontSize = 11.sp
+                                                        )
+                                                    }
+                                                }
+                                                
+                                                if (downloadProgress != null && downloadProgress < 1f) {
+                                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                        LinearProgressIndicator(
+                                                            progress = downloadProgress,
+                                                            color = MaterialTheme.colorScheme.primary,
+                                                            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
+                                                        )
+                                                        Text(
+                                                            text = "Прием блоков P2P: ${ (downloadProgress * 100).toInt() }%",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            fontSize = 9.sp,
+                                                            color = MaterialTheme.colorScheme.primary
+                                                        )
+                                                    }
+                                                } else {
+                                                    val isDownloaded = downloadProgress == 1f
+                                                    Button(
+                                                        onClick = {
+                                                            if (!isDownloaded) {
+                                                                scope.launch {
+                                                                    downloadedFilesState[message.id.toString()] = 0.0f
+                                                                    for (step in 1..10) {
+                                                                        kotlinx.coroutines.delay(200)
+                                                                        downloadedFilesState[message.id.toString()] = step / 10f
+                                                                    }
+                                                                    viewModel.showToast("📄 Файл получен и проверен в песочнице!")
+                                                                }
+                                                            } else {
+                                                                viewModel.showToast("Файл уже открыт в защищенной директории.")
+                                                            }
+                                                        },
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = if (isDownloaded) Color.DarkGray else MaterialTheme.colorScheme.primary
+                                                        ),
+                                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                                        modifier = Modifier.height(28.dp),
+                                                        shape = RoundedCornerShape(6.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = if (isDownloaded) "Открыть в песочнице 🔓" else "Скачать файл 📥",
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (isDownloaded) Color.White else Color.Black
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        } else if (renderedText.startsWith("[Video:") || renderedText.startsWith("[Audio:") || renderedText.contains("Голосовой эфир") || renderedText.contains("Только Живой Звук")) {
+                                            val isVideo = renderedText.startsWith("[Video:")
+                                            val textClean = renderedText.replace("[Video:", "").replace("[Audio:", "").replace("]", "").trim()
+                                            val title = if (renderedText.contains("Голосовой эфир") || renderedText.contains("Только Живой Звук")) "Голосовой эфир (Raw Sound)" else textClean.split("(").firstOrNull()?.trim() ?: "media_track"
+                                            
+                                            val isPlaying = activePlayingMedia[message.id.toString()] ?: false
+                                            val progress = playingPositions[message.id.toString()] ?: 0.0f
+                                            
+                                            // Handle Playback Simulation Loop
+                                            LaunchedEffect(isPlaying) {
+                                                if (isPlaying) {
+                                                    while (isPlaying && (playingPositions[message.id.toString()] ?: 0f) < 1f) {
+                                                        kotlinx.coroutines.delay(100)
+                                                        val currentPos = playingPositions[message.id.toString()] ?: 0f
+                                                        if (currentPos >= 1f) {
+                                                            activePlayingMedia[message.id.toString()] = false
+                                                            playingPositions[message.id.toString()] = 0f
+                                                            break
+                                                        }
+                                                        playingPositions[message.id.toString()] = currentPos + 0.02f
+                                                    }
+                                                    if ((playingPositions[message.id.toString()] ?: 0f) >= 1f) {
+                                                        activePlayingMedia[message.id.toString()] = false
+                                                        playingPositions[message.id.toString()] = 0f
+                                                    }
+                                                }
+                                            }
+
+                                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    IconButton(
+                                                        onClick = {
+                                                            activePlayingMedia[message.id.toString()] = !isPlaying
+                                                        },
+                                                        modifier = Modifier
+                                                            .size(36.dp)
+                                                            .background(MaterialTheme.colorScheme.secondary, CircleShape)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                            contentDescription = "Play",
+                                                            tint = Color.Black,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
+                                                    Column {
+                                                        Text(
+                                                            text = title,
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onBackground
+                                                        )
+                                                        Text(
+                                                            text = if (isVideo) "Видеосообщение • Сквозной поток" else "Голосовая трансляция Прямого Эфира",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = Color.Gray,
+                                                            fontSize = 10.sp
+                                                        )
+                                                    }
+                                                }
+
+                                                // Player waveform visualizer bars or slider
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().height(24.dp),
+                                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    repeat(15) { barIndex ->
+                                                        val barProgress = barIndex / 15f
+                                                        val heightVal = if (isPlaying) {
+                                                            (6..20).random()
+                                                        } else {
+                                                            10
+                                                        }
+                                                        val isPassed = progress >= barProgress
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .width(3.dp)
+                                                                .height(heightVal.dp)
+                                                                .clip(CircleShape)
+                                                                .background(
+                                                                    if (isPassed) MaterialTheme.colorScheme.secondary
+                                                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                                                                )
+                                                        )
+                                                    }
+                                                }
+                                                
+                                                Text(
+                                                    text = "Таймкод: ${ (progress * 15).toInt() }с / ${ if (isVideo) "12" else "64" }с",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontSize = 8.sp,
+                                                    color = MaterialTheme.colorScheme.secondary
+                                                )
+                                            }
+                                        } else {
+                                            Text(
+                                                text = renderedText,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onBackground
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1490,6 +1691,21 @@ fun ChatConversationScreen(
                     )
                 }
 
+                // Attachment (Paperclip) button
+                IconButton(
+                    onClick = { showAttachmentDialog = true },
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), CircleShape)
+                        .size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AttachFile,
+                        contentDescription = "Прикрепить файл",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
                 OutlinedTextField(
                     value = inputMessageText,
                     onValueChange = { inputMessageText = it },
@@ -1528,6 +1744,71 @@ fun ChatConversationScreen(
                         tint = Color.Black
                     )
                 }
+            }
+
+            if (showAttachmentDialog) {
+                AlertDialog(
+                    onDismissRequest = { showAttachmentDialog = false },
+                    title = { Text("Прикрепить медиа-файл", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Выберите тип отправляемого файла:", style = MaterialTheme.typography.bodyMedium)
+                            
+                            // Document Button
+                            Button(
+                                onClick = {
+                                    viewModel.sendMessage(chatId, "[File: secure_tunnel_backup.yaml (14.2 KB)]")
+                                    showAttachmentDialog = false
+                                    viewModel.showToast("📄 Файл secure_tunnel_backup.yaml отправлен!")
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Description, contentDescription = null, tint = Color.Black)
+                                    Text("Документ (YAML, PDF, CONF)", color = Color.Black)
+                                }
+                            }
+
+                            // Video Button
+                            Button(
+                                onClick = {
+                                    viewModel.sendMessage(chatId, "[Video: p2p_camera_feed.mp4 (4.8 MB, 0:12)]")
+                                    showAttachmentDialog = false
+                                    viewModel.showToast("🎥 Видео p2p_camera_feed.mp4 отправлено!")
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Movie, contentDescription = null, tint = Color.Black)
+                                    Text("Видеозапись (MP4, MKV)", color = Color.Black)
+                                }
+                            }
+
+                            // Audio Button
+                            Button(
+                                onClick = {
+                                    viewModel.sendMessage(chatId, "[Audio: raw_voice_capsule.wav (2.4 MB, 1:04)]")
+                                    showAttachmentDialog = false
+                                    viewModel.showToast("🎵 Аудиофайл raw_voice_capsule.wav отправлен!")
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.Black)
+                                    Text("Аудиозапись (MP3, WAV)", color = Color.Black)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showAttachmentDialog = false }) {
+                            Text("Отмена")
+                        }
+                    }
+                )
             }
         }
     }
@@ -2457,22 +2738,23 @@ fun SettingsTab(
                         )
                     }
                     IconButton(
-                        onClick = { viewModel.purchaseStars(2500) },
+                        onClick = { viewModel.purchaseStars(0) },
                         modifier = Modifier
                             .size(52.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary)
                     ) {
-                        Icon(Icons.Default.Star, contentDescription = "Refill", tint = Color.Black)
+                        Icon(Icons.Default.Info, contentDescription = "Rules", tint = Color.Black)
                     }
                 }
                 Text(
-                    text = "Звезды звеньев Primegram используются для отправки премиум-подарков разработчикам или анонимным собеседникам. За покупки начисляются дополнительные баллы доверия.",
+                    text = "Звёзды Primegram используются для отправки подарков. Внимание: согласно строгой схеме релиза, легкие способы покупки звезд заблокированы. Теперь единственный способ получить звёзды — общаться в чатах (+5 звёзд начисляются автоматически за каждый полученный ответ собеседника!).",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
+
 
         // Identity Configuration Card
         Card(
@@ -2536,6 +2818,84 @@ fun SettingsTab(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text("Сохранить параметры личности")
+                }
+            }
+        }
+
+        // 🎨 Theme Selector Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Оформление Primegram 🎨",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Выберите предпочтительную цветовую схему для интерфейса:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                val themeOptions = listOf(
+                    Triple("Dark Cosmic Slate", "🌌 Тёмная Космическая", listOf(Color(0xFF00E5FF), Color(0xFFD500F9))),
+                    Triple("Neon Nebula", "🔮 Фиолетовая Небула", listOf(Color(0xFFFF007F), Color(0xFF9D00FF))),
+                    Triple("Monochrome Matrix", "📟 Зелёная Матрица", listOf(Color(0xFF00FF3C), Color(0xFF00AA2C))),
+                    Triple("Classic Cyberpunk", "🦾 Киберпанк Ретро", listOf(Color(0xFFFCEE09), Color(0xFF00F0FF))),
+                    Triple("Light Alabaster", "◽ Светлый Алебастр", listOf(Color(0xFF2979FF), Color(0xFF651FFF))),
+                    Triple("Mint Fresh", "🍃 Мятная Свежесть", listOf(Color(0xFF2E7D32), Color(0xFFFF6D00)))
+                )
+
+                themeOptions.forEach { (themeId, label, colors) ->
+                    val isSelected = activeSettings.selectedTheme == themeId
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                else MaterialTheme.colorScheme.surface
+                            )
+                            .clickable { viewModel.changeTheme(themeId) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = { viewModel.changeTheme(themeId) }
+                            )
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        // Draw colored dots
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            colors.forEach { col ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .clip(CircleShape)
+                                        .background(col)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2684,51 +3044,80 @@ fun SettingsTab(
                 }
 
                 Text(
-                    text = "Интегрированные протоколы связи в активной сессии:",
+                    text = "Активные параметры Primegram Core (Режим Параноика):",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
 
-                // Sub-Features list
+                // Sub-Features list with interactive switches
                 val subProtocols = listOf(
-                    "🧅 Tor Onion Routing" to "Мета-микширование пакетов через 3 анонимных пира",
-                    "📶 Wi-Fi Hotspot Mesh" to "Сквозная раздача трафика и карт в офлайн-зонах без LTE",
-                    "👥 CRDT Blind Channels" to "Слепые группы: никто не знает участников, кроме своих соседей",
-                    "👻 UDP Multicast Rooms" to "Комнаты-призраки: переписка пишется только в сверхбыстрое ОЗУ",
-                    "✉️ P2P Message Dropping" to "Офлайн-транзит сообщений через попутные онлайн-ноды",
-                    "💿 Distributed Torrent Sharding" to "Нарезка тяжелых файлов на 100 шардов для распределенного кэша",
-                    "🧵 Sub-Ratchet Cryptography" to "Каждая ветка чата имеет автономное дерево ключей хранилища",
-                    "🛡️ NDK Anti-Frida Sentinel" to "Непрерывная верификация памяти на перехватчики ядра",
-                    "🔍 Bio FTS5 Crypto-Search" to "Криптографический мгновенный поиск по зашифрованной базе"
+                    Triple("onionRouting", "🧅 Tor Onion Routing", "Мета-микширование пакетов через 3 анонимных пира"),
+                    Triple("hotspotMesh", "📶 Wi-Fi Hotspot Mesh", "Сквозная раздача трафика и карт в офлайн-зонах без LTE"),
+                    Triple("blindChannels", "👥 CRDT Blind Channels", "Слепые группы: никто не знает участников, кроме своих соседей"),
+                    Triple("ephemeralRooms", "👻 UDP Multicast Rooms", "Комнаты-призраки: переписка пишется только в сверхбыстрое ОЗУ"),
+                    Triple("messageDropping", "✉️ P2P Message Dropping", "Офлайн-транзит сообщений через попутные онлайн-ноды"),
+                    Triple("mediaSharding", "💿 Distributed Torrent Sharding", "Нарезка тяжелых файлов на 100 шардов для распределенного кэша"),
+                    Triple("forkingThreads", "🧵 Sub-Ratchet Cryptography", "Каждая ветка чата имеет автономное дерево ключей хранилища"),
+                    Triple("antiFrida", "🛡️ NDK Anti-Frida Sentinel", "Непрерывная верификация памяти на перехватчики ядра"),
+                    Triple("fts5Crypto", "🔍 Bio FTS5 Crypto-Search", "Криптографический мгновенный поиск по зашифрованной базе")
                 )
 
-                subProtocols.forEach { (title, desc) ->
+                subProtocols.forEach { (key, title, desc) ->
+                    val isEnabled = when (key) {
+                        "onionRouting" -> activeSettings.onionRoutingEnabled
+                        "hotspotMesh" -> activeSettings.hotspotMeshBridgeEnabled
+                        "blindChannels" -> activeSettings.blindGroupChannelsEnabled
+                        "ephemeralRooms" -> activeSettings.ephemeralMulticastRoomsEnabled
+                        "messageDropping" -> activeSettings.p2pMessageDroppingEnabled
+                        "mediaSharding" -> activeSettings.distributedMediaShardingEnabled
+                        "forkingThreads" -> activeSettings.forkingThreadsEnabled
+                        "antiFrida" -> activeSettings.antiFridaEnabled
+                        "fts5Crypto" -> activeSettings.fts5CryptoEngineEnabled
+                        else -> false
+                    }
+
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(if (isCoreActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-                        )
-                        Column {
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (isCoreActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                             )
-                            Text(
-                                text = desc,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 11.sp
-                            )
+                            Column {
+                                Text(
+                                    text = title,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = desc,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp
+                                )
+                            }
                         }
+                        Switch(
+                            checked = isEnabled,
+                            onCheckedChange = { viewModel.toggleSecurityFeature(key, it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                            )
+                        )
                     }
                 }
             }
@@ -3094,8 +3483,13 @@ fun PartnerProfileDialog(
         chatUsers.find { it.id == partnerId }
     }
 
+    LaunchedEffect(partner) {
+        if (partner == null) {
+            onDismiss()
+        }
+    }
+
     if (partner == null) {
-        onDismiss()
         return
     }
 
@@ -3205,7 +3599,7 @@ fun PartnerProfileDialog(
                     ) {
                         if (partner.spentStars > 0) {
                             Text(
-                                text = "Набрано звёзд: ${partner.spentStars} 🌟",
+                                text = "Рейтинг признания: ${partner.spentStars} 🏆 звездный статус",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Black
@@ -3250,6 +3644,134 @@ fun PartnerProfileDialog(
                     }
                 }
 
+                // Companion Music Profile (Alive Playlist)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "🎵 Музыкальный Эфир контакта",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        
+                        // Parse companion songs
+                        val companionSongs = remember(partner.profileSongsJson) {
+                            try {
+                                val arr = org.json.JSONArray(partner.profileSongsJson)
+                                val list = mutableListOf<Pair<String, String>>()
+                                for (i in 0 until arr.length()) {
+                                    val obj = arr.getJSONObject(i)
+                                    list.add(Pair(obj.optString("title"), obj.optString("artist")))
+                                }
+                                list
+                            } catch (e: Exception) {
+                                emptyList()
+                            }
+                        }
+                        
+                        if (companionSongs.isNotEmpty()) {
+                            Text(
+                                text = "Нажмите на трек, чтобы подключиться к наушникам собеседника в реальном времени:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            companionSongs.forEach { (title, artist) ->
+                                var isListeningToThis by remember { mutableStateOf(false) }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isListeningToThis) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.4f))
+                                        .clickable {
+                                            isListeningToThis = !isListeningToThis
+                                            if (isListeningToThis) {
+                                                viewModel.showToast("🎧 Подключение по Прямому Эфиру! Слышу '${title}' от '${artist}' вместе с ${partner.displayName}! 🔗")
+                                            }
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        Text(text = artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Icon(
+                                        imageVector = if (isListeningToThis) Icons.Default.VolumeUp else Icons.Default.PlayArrow,
+                                        contentDescription = "Listen",
+                                        tint = if (isListeningToThis) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "У этого контакта ещё нет музыки в профиле.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray,
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                            )
+                        }
+
+                        // Input fields to add music directly to companion profile (For testing and easy simulation!)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Добавить музыку в профиль собеседника (Тестирование):",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        var companionSongTitle by remember { mutableStateOf("") }
+                        var companionSongArtist by remember { mutableStateOf("") }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = companionSongTitle,
+                                onValueChange = { companionSongTitle = it },
+                                label = { Text("Трек", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                            OutlinedTextField(
+                                value = companionSongArtist,
+                                onValueChange = { companionSongArtist = it },
+                                label = { Text("Исполнитель", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                if (companionSongTitle.isNotBlank() && companionSongArtist.isNotBlank()) {
+                                    viewModel.addSongToCompanionProfile(partner.id, companionSongTitle, companionSongArtist)
+                                    companionSongTitle = ""
+                                    companionSongArtist = ""
+                                } else {
+                                    viewModel.showToast("Введите трек и исполнителя!")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(vertical = 4.dp)
+                        ) {
+                            Text("Добавить трек собеседнику ➕", fontSize = 11.sp)
+                        }
+                    }
+                }
+
                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
 
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -3261,7 +3783,7 @@ fun PartnerProfileDialog(
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     Text(
-                        text = "Отправляйте подарки, чтобы повысить звездный статус собеседника. Звезды списываются с вашего баланса.",
+                        text = "Отправляйте подарки, чтобы повысить рейтинг признания собеседника. Звезды списываются с вашего личного баланса.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 12.dp)
@@ -4330,5 +4852,282 @@ fun AlivePlaylistTab(
             }
         }
     }
+}
+
+fun getFileNameFromUri(context: android.content.Context, uri: Uri): String? {
+    var result: String? = null
+    if (uri.scheme == "content") {
+        val cursor = context.contentResolver.query(uri, null, null, null, null)
+        try {
+            if (cursor != null && cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0) {
+                    result = cursor.getString(index)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            cursor?.close()
+        }
+    }
+    if (result == null) {
+        result = uri.path
+        val cut = result?.lastIndexOf('/') ?: -1
+        if (cut != -1) {
+            result = result?.substring(cut + 1)
+        }
+    }
+    return result
+}
+
+@Composable
+fun MyProfileDialog(
+    viewModel: PrimeViewModel,
+    onDismiss: () -> Unit
+) {
+    val settingsState by viewModel.settings.collectAsState()
+    val activeSettings = settingsState ?: PrimeSettingsEntity()
+    val context = LocalContext.current
+
+    var newSongTitle by remember { mutableStateOf("") }
+    var newSongArtist by remember { mutableStateOf("") }
+
+    val songsList = remember(activeSettings.profileSongsJson) {
+        val list = mutableListOf<Pair<String, String>>()
+        try {
+            val array = org.json.JSONArray(activeSettings.profileSongsJson)
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(Pair(obj.optString("title"), obj.optString("artist")))
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
+        list
+    }
+
+    val mp3PickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val fileName = getFileNameFromUri(context, uri) ?: "Неизвестный трек.mp3"
+            val cleanName = fileName.replace(".mp3", "", ignoreCase = true)
+            val parts = cleanName.split("-", limit = 2)
+            val artistName = if (parts.size > 1) parts[0].trim() else "Неизвестный исполнитель"
+            val songName = if (parts.size > 1) parts[1].trim() else parts[0].trim()
+            viewModel.addSongToOwnProfile(songName, artistName)
+            viewModel.showToast("🎵 Импортирован MP3: $songName — $artistName")
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Мой Профиль пользователя",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Identity Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = activeSettings.displayName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = activeSettings.username,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Fingerprint ID: ${activeSettings.userUniqueId.take(12)}...",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                        Text(
+                            text = activeSettings.bio,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Playlist Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Личный Музыкальный Стенд 🎵",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+
+                        if (songsList.isEmpty()) {
+                            Text(
+                                text = "Музыка не добавлена. Вы можете импортировать свои любимые MP3 файлы или ввести вручную треки ниже!",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                color = Color.Gray
+                            )
+                        } else {
+                            songsList.forEach { (title, artist) ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("🎵", fontSize = 14.sp)
+                                        Column {
+                                            Text(
+                                                text = title,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = artist,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.Gray,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            viewModel.removeSongFromOwnProfile(title, artist)
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Удалить трек",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Real MP3 Picker Button
+                        Button(
+                            onClick = {
+                                mp3PickerLauncher.launch("audio/*")
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondary,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("📁 Импортировать реальный MP3", fontWeight = FontWeight.Bold)
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        )
+
+                        Text(
+                            text = "Или добавить трек вручную:",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        OutlinedTextField(
+                            value = newSongTitle,
+                            onValueChange = { newSongTitle = it },
+                            label = { Text("Название трека") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+
+                        OutlinedTextField(
+                            value = newSongArtist,
+                            onValueChange = { newSongArtist = it },
+                            label = { Text("Исполнитель") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+
+                        Button(
+                            onClick = {
+                                if (newSongTitle.isNotBlank() && newSongArtist.isNotBlank()) {
+                                    viewModel.addSongToOwnProfile(newSongTitle, newSongArtist)
+                                    newSongTitle = ""
+                                    newSongArtist = ""
+                                } else {
+                                    viewModel.showToast("Пожалуйста заполните поля Название и Исполнитель!")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Добавить трек 🎶", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Закрыть")
+            }
+        }
+    )
 }
 
