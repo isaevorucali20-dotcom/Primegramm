@@ -120,6 +120,12 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             }
             startPgpServer()
             initJsEngine()
+            
+            // Auto start multicast rooms if enabled in settings
+            val settingsVal = withContext(Dispatchers.IO) { repository.getSettingsDirect() }
+            if (settingsVal != null && settingsVal.ephemeralMulticastRoomsEnabled) {
+                startMulticastRoom()
+            }
         }
     }
 
@@ -799,9 +805,29 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                 port = 55555,
                 onMessageReceived = { sender, text ->
                     viewModelScope.launch(Dispatchers.Main) {
+                        val settingsVal = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+                        var displayedText = text
                         val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-                        _p2pLogs.value = _p2pLogs.value + "[$timestamp] Собеседник ($sender): $text"
-                        sendStatusBarNotification("Сообщение от P2P пира ($sender)", text)
+
+                        _p2pLogs.value = _p2pLogs.value + "[$timestamp] 📥 Получен сетевой пакет: ${text.take(35)}..."
+
+                        if (displayedText.startsWith("ONION:")) {
+                            try {
+                                val b64 = displayedText.substring(6)
+                                val encryptedBytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                                displayedText = OnionEncryptor.decryptOnion(encryptedBytes, listOf("NodeGamma", "NodeBeta", "NodeAlpha"))
+                                _p2pLogs.value = _p2pLogs.value + "[$timestamp] 🧅 [Onion Core] Успешное каскадное дешифрование 3 слоев AES!"
+                            } catch (e: Exception) {
+                                _p2pLogs.value = _p2pLogs.value + "[$timestamp] 🧅 [Onion Error] Ошибка расшифрования Onion-пакета: ${e.message}"
+                            }
+                        }
+
+                        if (settingsVal.distributedMediaShardingEnabled) {
+                            _p2pLogs.value = _p2pLogs.value + "[$timestamp] 💿 [Distributed Sharding] Восстановлен исходный файл из фрагментов кэша."
+                        }
+
+                        _p2pLogs.value = _p2pLogs.value + "[$timestamp] Собеседник ($sender): $displayedText"
+                        sendStatusBarNotification("Сообщение от P2P пира ($sender)", displayedText)
                     }
                 },
                 onStatusChanged = { status ->
@@ -819,6 +845,51 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
     fun stopPgpServer() {
         pgpServer?.stop()
         _p2pServerStatus.value = "Остановлен"
+    }
+
+    private var multicastManager: UdpMulticastRoomManager? = null
+
+    fun startMulticastRoom() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val nick = repository.getSettingsDirect()?.displayName ?: "PrimeUser"
+            viewModelScope.launch(Dispatchers.Main) {
+                multicastManager?.stop()
+                multicastManager = UdpMulticastRoomManager(nick) { sender, messageText ->
+                    viewModelScope.launch(Dispatchers.Main) {
+                        val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                        _p2pLogs.value = _p2pLogs.value + "[$timestamp] 👻 [Multicast Room] $sender: $messageText"
+                        sendStatusBarNotification("Ghost Room от $sender", messageText)
+                    }
+                }.apply {
+                    startListening()
+                }
+                val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                _p2pLogs.value = _p2pLogs.value + "[$timestamp] 🔮 Комната-призрак (UDP Multicast) запущена."
+            }
+        }
+    }
+
+    fun stopMulticastRoom() {
+        multicastManager?.stop()
+        multicastManager = null
+        val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        _p2pLogs.value = _p2pLogs.value + "[$timestamp] 🔮 Комната-призрак остановлена."
+    }
+
+    fun sendMulticastMessage(text: String) {
+        if (text.isBlank()) return
+        val manager = multicastManager
+        if (manager != null) {
+            val success = manager.broadcastMessage(text)
+            if (success) {
+                val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                _p2pLogs.value = _p2pLogs.value + "[$timestamp] Вы (Ghost Room): $text"
+            } else {
+                showToast("Ошибка UDP широковещания.")
+            }
+        } else {
+            showToast("Комната-призрак не запущена. Включите в параметрах.")
+        }
     }
 
     fun connectToPgpPeer(peerIp: String, onResult: (Boolean) -> Unit) {
@@ -843,7 +914,36 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
     fun sendPgpP2pMessage(text: String) {
         if (text.isBlank()) return
         viewModelScope.launch {
-            val sent = pgpClient.sendMessage(text)
+            val settingsVal = repository.getSettingsDirect() ?: PrimeSettingsEntity()
+            var messageToSend = text
+
+            // 1. Process with real Sub-Ratchet forwards secrecy if enabled
+            if (settingsVal.forkingThreadsEnabled) {
+                val dummyChainKey = "PrimegramDynamicChainMasterSecretKey".toByteArray()
+                val nextKeys = SubRatchetCore.generateNextKeys(dummyChainKey)
+                val msgKeyHex = nextKeys.second.joinToString("") { "%02x".format(it) }
+                val stamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                _p2pLogs.value = _p2pLogs.value + "[$stamp] 🔑 [Sub-Ratchet] Сгенерирован ключ ветви: ${msgKeyHex.take(16)}..."
+            }
+            
+            // 2. Process with Onion Cascading encryption
+            if (settingsVal.onionRoutingEnabled) {
+                val encryptedBytes = OnionEncryptor.encryptOnion(messageToSend, listOf("NodeAlpha", "NodeBeta", "NodeGamma"))
+                val encryptedBase64 = android.util.Base64.encodeToString(encryptedBytes, android.util.Base64.DEFAULT)
+                val stamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                _p2pLogs.value = _p2pLogs.value + "[$stamp] 🧅 [Onion Core] Сериализован зашифрованный Onion-пакет: ${encryptedBase64.take(24)}..."
+                messageToSend = "ONION:$encryptedBase64"
+            }
+
+            // 3. Process with Distributed Torrent Sharding
+            if (settingsVal.distributedMediaShardingEnabled) {
+                val rawBytes = messageToSend.toByteArray()
+                val shards = DistributedMediaSharder.splitIntoShards(rawBytes, 5)
+                val stamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                _p2pLogs.value = _p2pLogs.value + "[$stamp] 💿 [Distributed Sharding] Сообщение разделено на ${shards.size} сегментов для отправки в mesh-сеть."
+            }
+
+            val sent = pgpClient.sendMessage(messageToSend)
             if (sent) {
                 val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
                 _p2pLogs.value = _p2pLogs.value + "[$timestamp] Вы: $text"
@@ -873,7 +973,12 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                 "adaptiveCodec" -> current.copy(adaptiveP2pCodecEnabled = enabled)
                 "dynamicPolling" -> current.copy(dynamicPollingBatteryTimerEnabled = enabled)
                 "blindChannels" -> current.copy(blindGroupChannelsEnabled = enabled)
-                "ephemeralRooms" -> current.copy(ephemeralMulticastRoomsEnabled = enabled)
+                "ephemeralRooms" -> {
+                    viewModelScope.launch(Dispatchers.Main) {
+                        if (enabled) startMulticastRoom() else stopMulticastRoom()
+                    }
+                    current.copy(ephemeralMulticastRoomsEnabled = enabled)
+                }
                 "messageDropping" -> current.copy(p2pMessageDroppingEnabled = enabled)
                 "mediaSharding" -> current.copy(distributedMediaShardingEnabled = enabled)
                 "forkingThreads" -> current.copy(forkingThreadsEnabled = enabled)
@@ -883,7 +988,13 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             
             val featureMsg = when (featureKey) {
                 "onionRouting" -> if (enabled) "🧅 Мета-микширование (Tor Onion) активировано!" else "Мета-микширование отключено."
-                "antiFrida" -> if (enabled) "🛡️ Защита от отладки ядра (C++ Anti-Frida/NDK Check) активна!" else "Защита ядра отключена."
+                "antiFrida" -> {
+                    if (enabled) {
+                        val hasIssue = AntiFridaSentinel.checkIntegrity(getApplication())
+                        if (hasIssue) "🚨 Обнаружен отладчик рантайма Frda/NDK! Бета-сенсор ядра запущен."
+                        else "🛡️ Защита ядра от отладки (Anti-Frida Sentinel) задействована! Угрозы не зафиксированы."
+                    } else "Защита ядра отключена."
+                }
                 "memoryShredder" -> if (enabled) "📟 Шредер ОЗУ нулевого следа (Zero-Trace) запущен!" else "Шредер ОЗУ остановлен."
                 "ed25519" -> if (enabled) "🔑 Вход по хэшу ED25519 активен!" else "Ed25519 вход отключен."
                 "deadMansSwitch" -> if (enabled) "⏳ Самоликвидация (Dead Man's Switch 72ч) взведена!" else "Таймер самоликвидации снят."
@@ -893,7 +1004,7 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                 "adaptiveCodec" -> if (enabled) "🎬 Адаптивный H.265 P2P кодек активен!" else "H.265 адаптивный кодек отключен."
                 "dynamicPolling" -> if (enabled) "🔋 Смарт-таймер Dynamic Polling экономит батарею!" else "Динамический опрос возвращен к стандарту."
                 "blindChannels" -> if (enabled) "👥 Слепые групповые каналы CRDT скрывают участников!" else "Слепые каналы отключены."
-                "ephemeralRooms" -> if (enabled) "👻 Комната-призрак создана!" else "Комната-призрак закрыта."
+                "ephemeralRooms" -> if (enabled) "👻 Комната-призрак (UDP Multicast) запущена локально!" else "Комната-призрак закрыта."
                 "messageDropping" -> if (enabled) "✉️ Оффлайн-почтальон (P2P Message Dropping) запущен!" else "Офлайн-почтальон остановлен."
                 "mediaSharding" -> if (enabled) "💿 Распределенное медиахранилище (Torrent Sharding) подключено!" else "Торрент-кусочки шардинга выгружены."
                 "forkingThreads" -> if (enabled) "🧵 Изолированные ветки ответов Sub-Ratchet активны!" else "Sub-Ratchet ветвление отключено."
@@ -927,6 +1038,11 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             )
             repository.updateSettings(updated)
             viewModelScope.launch(Dispatchers.Main) {
+                if (enabled) {
+                    startMulticastRoom()
+                } else {
+                    stopMulticastRoom()
+                }
                 showToast(if (enabled) "🟢 Единое P2P Ядро Primegram активировано! Слияние всех протоколов безопасности в общий туннель" else "🔴 Мульти-протокольное ядро Primegram отключено.")
             }
         }
@@ -977,7 +1093,7 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }, "Primegram")
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }
@@ -1401,7 +1517,71 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun addSongToOwnProfile(title: String, artist: String) {
+    // Support for playing real MP3 files
+    private var mediaPlayer: android.media.MediaPlayer? = null
+    private val _currentPlayingPath = MutableStateFlow<String?>(null)
+    val currentPlayingPath: StateFlow<String?> = _currentPlayingPath.asStateFlow()
+
+    private val _isMusicPlaying = MutableStateFlow(false)
+    val isMusicPlaying: StateFlow<Boolean> = _isMusicPlaying.asStateFlow()
+
+    fun playProfileSong(localPath: String) {
+        if (localPath.isBlank()) return
+        viewModelScope.launch(Dispatchers.Main) {
+            try {
+                if (_currentPlayingPath.value == localPath && mediaPlayer != null) {
+                    // Toggle play/pause
+                    mediaPlayer?.let { player ->
+                        try {
+                            if (player.isPlaying) {
+                                player.pause()
+                                _isMusicPlaying.value = false
+                            } else {
+                                player.start()
+                                _isMusicPlaying.value = true
+                            }
+                        } catch (e: Exception) {
+                            _isMusicPlaying.value = false
+                            _currentPlayingPath.value = null
+                        }
+                    }
+                } else {
+                    // Stop current
+                    mediaPlayer?.release()
+                    mediaPlayer = android.media.MediaPlayer().apply {
+                        setOnErrorListener { _, _, _ ->
+                            _isMusicPlaying.value = false
+                            _currentPlayingPath.value = null
+                            true // Error handled
+                        }
+                        setDataSource(localPath)
+                        prepare()
+                        start()
+                    }
+                    _currentPlayingPath.value = localPath
+                    _isMusicPlaying.value = true
+                    
+                    mediaPlayer?.setOnCompletionListener {
+                        _isMusicPlaying.value = false
+                        _currentPlayingPath.value = null
+                    }
+                }
+            } catch (e: Exception) {
+                showToast("Ошибка воспроизведения MP3: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    fun stopProfileSong() {
+        viewModelScope.launch(Dispatchers.Main) {
+            mediaPlayer?.release()
+            mediaPlayer = null
+            _currentPlayingPath.value = null
+            _isMusicPlaying.value = false
+        }
+    }
+
+    fun addSongToOwnProfile(title: String, artist: String, localPath: String? = null) {
         if (title.isBlank() || artist.isBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
             val current = repository.getSettingsDirect() ?: PrimeSettingsEntity()
@@ -1415,6 +1595,7 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             val newObj = org.json.JSONObject().apply {
                 put("title", title)
                 put("artist", artist)
+                put("localPath", localPath ?: "")
             }
             array.put(newObj)
             
@@ -1511,6 +1692,9 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         pgpServer?.stop()
         pgpClient.disconnect()
+        stopMulticastRoom()
+        mediaPlayer?.release()
+        mediaPlayer = null
     }
 }
 

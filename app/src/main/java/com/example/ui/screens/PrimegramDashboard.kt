@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.sp
 import com.example.data.*
 import com.example.ui.PrimeViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
@@ -144,7 +146,7 @@ fun PrimegramDashboard(viewModel: PrimeViewModel) {
                     Triple("proxy", "Управление Прокси", Icons.Default.VpnLock),
                     Triple("plugins", "Плагины (Mods)", Icons.Default.Extension),
                     Triple("miniapps", "Мини-Приложения", Icons.Default.Apps),
-                    Triple("settings", "Параметры Ядра", Icons.Default.Settings)
+                    Triple("settings", "Параметры Primegram", Icons.Default.Settings)
                 )
 
                 menuItems.forEach { item ->
@@ -4857,8 +4859,9 @@ fun AlivePlaylistTab(
 fun getFileNameFromUri(context: android.content.Context, uri: Uri): String? {
     var result: String? = null
     if (uri.scheme == "content") {
-        val cursor = context.contentResolver.query(uri, null, null, null, null)
+        var cursor: android.database.Cursor? = null
         try {
+            cursor = context.contentResolver.query(uri, null, null, null, null)
             if (cursor != null && cursor.moveToFirst()) {
                 val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (index >= 0) {
@@ -4881,6 +4884,24 @@ fun getFileNameFromUri(context: android.content.Context, uri: Uri): String? {
     return result
 }
 
+fun copyUriToLocal(context: android.content.Context, uri: Uri): String? {
+    return try {
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+        val dir = java.io.File(context.filesDir, "profile_songs")
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        val file = java.io.File(dir, "song_${System.currentTimeMillis()}.mp3")
+        file.outputStream().use { outputStream ->
+            inputStream.use { it.copyTo(outputStream) }
+        }
+        file.absolutePath
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
+
 @Composable
 fun MyProfileDialog(
     viewModel: PrimeViewModel,
@@ -4889,17 +4910,24 @@ fun MyProfileDialog(
     val settingsState by viewModel.settings.collectAsState()
     val activeSettings = settingsState ?: PrimeSettingsEntity()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val currentPlayingPath by viewModel.currentPlayingPath.collectAsState()
+    val isMusicPlaying by viewModel.isMusicPlaying.collectAsState()
 
     var newSongTitle by remember { mutableStateOf("") }
     var newSongArtist by remember { mutableStateOf("") }
 
     val songsList = remember(activeSettings.profileSongsJson) {
-        val list = mutableListOf<Pair<String, String>>()
+        val list = mutableListOf<Triple<String, String, String>>()
         try {
             val array = org.json.JSONArray(activeSettings.profileSongsJson)
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
-                list.add(Pair(obj.optString("title"), obj.optString("artist")))
+                list.add(Triple(
+                    obj.optString("title"),
+                    obj.optString("artist"),
+                    obj.optString("localPath", "")
+                ))
             }
         } catch (e: Exception) {
             // ignore
@@ -4911,13 +4939,25 @@ fun MyProfileDialog(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            val fileName = getFileNameFromUri(context, uri) ?: "Неизвестный трек.mp3"
-            val cleanName = fileName.replace(".mp3", "", ignoreCase = true)
-            val parts = cleanName.split("-", limit = 2)
-            val artistName = if (parts.size > 1) parts[0].trim() else "Неизвестный исполнитель"
-            val songName = if (parts.size > 1) parts[1].trim() else parts[0].trim()
-            viewModel.addSongToOwnProfile(songName, artistName)
-            viewModel.showToast("🎵 Импортирован MP3: $songName — $artistName")
+            scope.launch {
+                val fileName = withContext(Dispatchers.IO) {
+                    getFileNameFromUri(context, uri)
+                } ?: "Неизвестный трек.mp3"
+                val cleanName = fileName.replace(".mp3", "", ignoreCase = true)
+                val parts = cleanName.split("-", limit = 2)
+                val artistName = if (parts.size > 1) parts[0].trim() else "Неизвестный исполнитель"
+                val songName = if (parts.size > 1) parts[1].trim() else parts[0].trim()
+                
+                val localPath = withContext(Dispatchers.IO) {
+                    copyUriToLocal(context, uri)
+                }
+                viewModel.addSongToOwnProfile(songName, artistName, localPath)
+                if (localPath != null) {
+                    viewModel.showToast("🎵 Импортирован MP3: $songName — $artistName (Файл на локальном диске)")
+                } else {
+                    viewModel.showToast("⚠️ Ошибка при копировании MP3 файла.")
+                }
+            }
         }
     }
 
@@ -5007,7 +5047,7 @@ fun MyProfileDialog(
                                 color = Color.Gray
                             )
                         } else {
-                            songsList.forEach { (title, artist) ->
+                            songsList.forEach { (title, artist, localPath) ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -5016,22 +5056,40 @@ fun MyProfileDialog(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
+                                    val isCurrentPlaying = (currentPlayingPath == localPath && localPath.isNotEmpty()) && isMusicPlaying
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         modifier = Modifier.weight(1f)
                                     ) {
-                                        Text("🎵", fontSize = 14.sp)
+                                        IconButton(
+                                            onClick = {
+                                                if (localPath.isNotEmpty()) {
+                                                    viewModel.playProfileSong(localPath)
+                                                } else {
+                                                    viewModel.showToast("Сначала импортируйте MP3 файл.")
+                                                }
+                                            },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isCurrentPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                contentDescription = if (isCurrentPlaying) "Пауза" else "Играть",
+                                                tint = if (isCurrentPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
                                         Column {
                                             Text(
                                                 text = title,
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.Bold,
+                                                color = if (isCurrentPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                             Text(
-                                                text = artist,
+                                                text = if (localPath.isNotEmpty()) "$artist • MP3" else "$artist • Вручную",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = Color.Gray,
                                                 maxLines = 1,
