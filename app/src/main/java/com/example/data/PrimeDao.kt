@@ -46,6 +46,12 @@ interface PrimeDao {
     @Query("UPDATE messages_table SET text = :text, isInterceptedDeleted = 1 WHERE id = :messageId")
     suspend fun markMessageInterceptedDeleted(messageId: Long, text: String)
 
+    @Query("UPDATE messages_table SET text = :newText, isTranslated = 0, translatedText = NULL WHERE id = :messageId")
+    suspend fun updateMessageText(messageId: Long, newText: String)
+
+    @Query("DELETE FROM messages_table WHERE id = :messageId")
+    suspend fun deleteMessage(messageId: Long)
+
     @Query("DELETE FROM messages_table WHERE chatId = :chatId")
     suspend fun clearChatMessages(chatId: String)
 

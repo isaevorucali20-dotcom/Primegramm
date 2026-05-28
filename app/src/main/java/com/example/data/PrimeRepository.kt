@@ -23,6 +23,8 @@ class PrimeRepository(private val dao: PrimeDao) {
     suspend fun insertMessage(message: MessageEntity) = dao.insertMessage(message)
     suspend fun markMessageDeletedLocally(messageId: Long) = dao.markMessageDeletedLocally(messageId)
     suspend fun markMessageInterceptedDeleted(messageId: Long, text: String) = dao.markMessageInterceptedDeleted(messageId, text)
+    suspend fun updateMessageText(messageId: Long, newText: String) = dao.updateMessageText(messageId, newText)
+    suspend fun deleteMessage(messageId: Long) = dao.deleteMessage(messageId)
     suspend fun clearChatMessages(chatId: String) = dao.clearChatMessages(chatId)
     suspend fun clearAllMessages() = dao.clearAllMessages()
     suspend fun updateMessageTranslation(messageId: Long, translatedText: String) = dao.updateMessageTranslation(messageId, translatedText)

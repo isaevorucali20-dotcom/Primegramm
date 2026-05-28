@@ -117,6 +117,8 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             // Initialize Default Values if Empty
             withContext(Dispatchers.IO) {
                 setupInitialDatabaseData()
+                // Ensure old anti_recall plugin is removed out of database
+                repository.deletePlugin("anti_recall")
             }
             startPgpServer()
             initJsEngine()
@@ -212,27 +214,6 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
         // 5. Hardcoded Engine Plugins
         val existingPlugins = repository.plugins.first()
         if (existingPlugins.isEmpty()) {
-            repository.insertPlugin(
-                PluginEntity(
-                    id = "anti_recall",
-                    name = "Anti-Recall Pro",
-                    version = "v3.1",
-                    isEnabled = true,
-                    type = "System Core",
-                    description = "Перехватывает и сохраняет сообщения, которые собеседник пытается удалить из диалога.",
-                    scriptCode = """
-                        function onSendMessage(msg) {
-                            return msg;
-                        }
-                        function onReceiveMessage(msg) {
-                            return msg;
-                        }
-                        function onEnabled(isEnabled) {
-                            Primegram.showToast("Anti-Recall Pro: " + (isEnabled ? "Активен" : "Отключен"));
-                        }
-                    """.trimIndent()
-                )
-            )
             repository.insertPlugin(
                 PluginEntity(
                     id = "media_saver",
@@ -343,6 +324,18 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
                 currentChatId.value = null
             }
             showToast("Чат успешно удален.")
+        }
+    }
+
+    fun editMessage(messageId: Long, newText: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.updateMessageText(messageId, newText)
+        }
+    }
+
+    fun deleteMessage(messageId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteMessage(messageId)
         }
     }
 
@@ -643,7 +636,6 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             repository.setPluginEnabled(id, enabled)
             // Synchronize with direct states
             when(id) {
-                "anti_recall" -> setAntiRecallEnabled(enabled)
                 "media_saver" -> setMediaSaverEnabled(enabled)
                 "ghost_mode" -> setGhostModeEnabled(enabled)
                 "ip_spoofer" -> {
@@ -771,7 +763,6 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
     fun simulateDeletedMessageTrigger() {
         viewModelScope.launch(Dispatchers.IO) {
             val chatId = currentChatId.value ?: return@launch
-            val partner = getChatPartnerName(chatId)
             
             // Insert partner temporary message
             val tempMsgId = System.currentTimeMillis()
@@ -785,16 +776,8 @@ class PrimeViewModel(application: Application) : AndroidViewModel(application) {
             
             delay(3000)
 
-            val settingsVal = repository.getSettingsDirect() ?: PrimeSettingsEntity()
-            if (settingsVal.antiRecallEnabled) {
-                // Keep it and mark as intercepted-deleted
-                repository.markMessageInterceptedDeleted(tempMsgId, "📥 [Anti-Recall Перехвачено] Секретный IP: 85.112.42.19")
-                showToast("📥 Anti-Recall Pro: Собеседник попытался удалить сообщение, но оно сохранено в журнал!")
-            } else {
-                // Delete it as requested
-                repository.markMessageDeletedLocally(tempMsgId)
-                showToast("🗑️ Собеседник удалил сообщение. Включите Anti-Recall Pro для удержания.")
-            }
+            repository.deleteMessage(tempMsgId)
+            showToast("🗑️ Собеседник удалил сообщение.")
         }
     }
 
